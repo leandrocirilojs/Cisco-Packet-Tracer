@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -34,6 +36,7 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-dark); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; }
+
 
   /* ─── MENU BAR ─── */
   #menubar {
@@ -79,7 +82,7 @@
   .mode-badge.note { background: rgba(240,165,0,.15); color: var(--accent-orange); border: 1px solid rgba(240,165,0,.3); }
 
   /* ─── MAIN LAYOUT ─── */
-  #main { display: flex; height: calc(100vh - 28px - var(--toolbar-h) - var(--statusbar-h)); overflow: hidden; }
+  #main { display: flex; height: calc(100vh - 28px - var(--toolbar-h) - var(--statusbar-h)); }
 
   /* ─── LEFT SIDEBAR ─── */
   #sidebar {
@@ -158,7 +161,7 @@
   .empty-state { color: var(--text-dim); font-size: 12px; text-align: center; padding: 30px 10px; line-height: 1.8; }
 
   /* ─── BOTTOM CLI ─── */
-  #bottom-panel { height: var(--bottombar-h); border-top: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-dark); overflow: hidden; flex-shrink: 0; }
+  #bottom-panel { height: var(--bottombar-h); border-top: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-dark); }
   .cli-tabs { display: flex; background: var(--bg-panel); border-bottom: 1px solid var(--border); }
   .cli-tab { padding: 5px 14px; font-size: 11px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; }
   .cli-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -1086,8 +1089,6 @@ function cliLog(type, msg) {
   out.scrollTop = out.scrollHeight;
 }
 
-let cliIfaceCtx = null; // current interface context: { nodeId, ifaceIndex, ifaceName }
-
 function updateCliPrompt(n) {
   const label = n ? `${n.name}#` : 'NetSim#';
   document.getElementById('cli-prompt-label').textContent = label;
@@ -1102,10 +1103,7 @@ function cliKeyDown(e) {
     cliHistIdx = -1;
     input.value = '';
     const n = selected ? getNode(selected) : null;
-    let prompt = n ? n.name+'#' : 'NetSim#';
-    if (cliIfaceCtx && cliIfaceCtx.nodeId === n?.id) {
-      prompt = `${n.name}(config-if)#`;
-    }
+    const prompt = n ? n.name+'#' : 'NetSim#';
     cliLog('', `<span class="cli-prompt">${prompt}</span> <span class="cli-cmd">${cmd}</span>`);
     processCommand(cmd, n);
   } else if (e.key === 'ArrowUp') {
@@ -1141,7 +1139,6 @@ function processCommand(cmd, n) {
     cliLog('','  <b>show version</b> — Versão do sistema');
     cliLog('','  <b>hostname [nome]</b> — Renomear dispositivo');
     cliLog('','  <b>ip address [ip] [máscara]</b> — Configurar IP');
-    cliLog('','  <b>interface [Fa0/0|Fa0/1|Se0/0]</b> — Entrar em contexto de interface');
     cliLog('','  <b>ip route [rede] [máscara] [nexthop]</b> — Rota estática');
     cliLog('','  <b>shutdown / no shutdown</b> — Desativar/ativar interface');
     cliLog('','  <b>clear</b> — Limpar terminal');
@@ -1159,35 +1156,9 @@ function processCommand(cmd, n) {
 
   if (c === 'show ip') {
     cliLog('ok',`Dispositivo: ${n.name}`);
-    cliLog('','IP Address:  '+(n.ip||'(não configurado)'));
+    cliLog('','IP Address:  '+( n.ip||'(não configurado)'));
     cliLog('','Subnet Mask: '+(n.mask||'255.255.255.0'));
     cliLog('','Gateway:     '+(n.gateway||'(não configurado)'));
-    if (n.ip && n.mask) {
-      const netAddr = getNetworkAddr(n.ip, n.mask);
-      const prefix = maskToPrefix(n.mask);
-      const netStr = [(netAddr>>>24)&255,(netAddr>>>16)&255,(netAddr>>>8)&255,netAddr&255].join('.');
-      cliLog('','Network:     '+netStr+'/'+prefix);
-    }
-    if (n.gateway) {
-      const gwNode = nodes.find(nd => nd.ip === n.gateway);
-      cliLog('','Gateway via: '+(gwNode ? gwNode.name : '(não encontrado na topologia)'));
-    }
-    return;
-  }
-  if (c === 'show ip route') {
-    cliLog('ok',`Tabela de Roteamento — ${n.name}:`);
-    if (n.ip) {
-      const prefix = maskToPrefix(n.mask||'255.255.255.0');
-      const netAddr = getNetworkAddr(n.ip, n.mask||'255.255.255.0');
-      const netStr = [(netAddr>>>24)&255,(netAddr>>>16)&255,(netAddr>>>8)&255,netAddr&255].join('.');
-      cliLog('ok',`C    ${netStr}/${prefix} is directly connected`);
-    }
-    if (n.routing?.length) {
-      n.routing.forEach(r => cliLog('ok',`S    ${r.network}/${r.prefix} [${r.metric}/0] via ${r.nexthop}`));
-    } else if (n.type !== 'router' && n.type !== 'router3layer') {
-      if (n.gateway) cliLog('ok',`S*   0.0.0.0/0 via ${n.gateway} (default gateway)`);
-    }
-    if (!n.ip && !n.routing?.length) cliLog('warn','Nenhuma rota configurada.');
     return;
   }
   if (c === 'show arp') {
@@ -1197,12 +1168,9 @@ function processCommand(cmd, n) {
     return;
   }
   if (c === 'show interfaces') {
-    if (!n.interfaces?.length) { cliLog('warn','Nenhuma interface disponível.'); return; }
-    n.interfaces.forEach(iface => {
-      const st = iface.status === 'up' ? 'up' : 'down';
-      cliLog(st==='up'?'ok':'warn',`${iface.name} is ${st}, line protocol is ${st}`);
-      cliLog('',`  Internet address is ${iface.ip || 'unassigned'}${iface.ip&&iface.mask?' /'+maskToPrefix(iface.mask):''}`);
-      cliLog('',`  MTU 1500 bytes, BW 100000 Kbit`);
+    (n.interfaces||[]).forEach(iface => {
+      cliLog('ok',`${iface.name} is ${iface.status==='up'?'up':'down'}, line protocol is ${iface.status==='up'?'up':'down'}`);
+      cliLog('','  Internet address is '+(iface.ip||'unassigned'));
     });
     return;
   }
@@ -1224,22 +1192,8 @@ function processCommand(cmd, n) {
     const parts = cmd.split(' ');
     if (parts.length >= 4) {
       const newIp = parts[2];
-      const newMask = parts[3];
-      // If inside interface context, configure that interface's IP
-      if (cliIfaceCtx && cliIfaceCtx.nodeId === n.id) {
-        const iface = n.interfaces[cliIfaceCtx.ifaceIndex];
-        iface.ip = newIp;
-        iface.mask = newMask;
-        iface.status = 'up';
-        // Also update router's main IP if it's the first interface
-        if (cliIfaceCtx.ifaceIndex === 0 && !n.ip) { n.ip = newIp; n.mask = newMask; }
-        cliLog('ok', `IP ${newIp} ${newMask} configurado em ${iface.name}.`);
-        render(); showProperties(n);
-        return;
-      }
-      // No interface context — configure device main IP
       const oldIp = n.ip;
-      n.ip = newIp; n.mask = newMask;
+      n.ip = newIp; n.mask = parts[3];
       const conflict = nodes.find(nd => nd.ip === newIp && nd.id !== n.id && nd.type !== 'note');
       if (conflict) {
         cliLog('warn', `%IP-4-DUPADDR: Duplicate address ${newIp} on ${n.name}, sourced by ${conflict.name}`);
@@ -1277,24 +1231,14 @@ function processCommand(cmd, n) {
     return;
   }
   if (c === 'shutdown') {
-    if (cliIfaceCtx && cliIfaceCtx.nodeId === n.id) {
-      n.interfaces[cliIfaceCtx.ifaceIndex].status = 'down';
-      cliLog('warn',`Interface ${cliIfaceCtx.ifaceName} desativada.`);
-    } else {
-      n.active = false;
-      cliLog('warn','Interface desativada (shutdown).');
-    }
-    render(); showProperties(n); return;
+    n.active = false; render(); showProperties(n);
+    cliLog('warn','Interface desativada (shutdown).');
+    return;
   }
   if (c === 'no shutdown') {
-    if (cliIfaceCtx && cliIfaceCtx.nodeId === n.id) {
-      n.interfaces[cliIfaceCtx.ifaceIndex].status = 'up';
-      cliLog('ok',`Interface ${cliIfaceCtx.ifaceName} ativada.`);
-    } else {
-      n.active = true;
-      cliLog('ok','Interface ativada (no shutdown).');
-    }
-    render(); showProperties(n); return;
+    n.active = true; render(); showProperties(n);
+    cliLog('ok','Interface ativada (no shutdown).');
+    return;
   }
   if (c === 'write memory' || c === 'copy running-config startup-config') {
     cliLog('ok','Building configuration... [OK]');
@@ -1302,42 +1246,8 @@ function processCommand(cmd, n) {
     return;
   }
   if (c === 'enable') { cliLog('ok','Enter Password: '); setTimeout(()=>cliLog('ok',n.name+'#'),300); return; }
-  if (c === 'configure terminal' || c === 'conf t') {
-    cliIfaceCtx = null;
-    cliLog('ok','Enter configuration commands, one per line. End with CNTL/Z.');
-    cliLog('ok',n.name+'(config)#');
-    return;
-  }
-  if (c === 'exit') {
-    if (cliIfaceCtx && cliIfaceCtx.nodeId === n.id) {
-      cliIfaceCtx = null;
-      cliLog('ok', n.name+'(config)#');
-    } else {
-      cliLog('ok', n.name+'#');
-    }
-    return;
-  }
-  if (c === 'end' || c === '^z') {
-    cliIfaceCtx = null;
-    cliLog('ok', n.name+'#');
-    return;
-  }
-  // interface Fa0/0 | Fa0/1 | Se0/0 ...
-  if (c.startsWith('interface ')) {
-    const ifName = cmd.split(' ').slice(1).join(' ').trim();
-    if (!n.interfaces?.length) { cliLog('err','Este dispositivo não possui interfaces configuráveis.'); return; }
-    // Match by name (case-insensitive, also allow short forms: fa0/0, f0/0, s0/0)
-    const normalize = s => s.toLowerCase().replace(/fastethernet/,'fa').replace(/gigabitethernet/,'gi').replace(/serial/,'se').replace(/ethernet/,'et');
-    const ifIdx = n.interfaces.findIndex(i => normalize(i.name) === normalize(ifName));
-    if (ifIdx === -1) {
-      cliLog('err', `% Interface ${ifName} não encontrada em ${n.name}.`);
-      cliLog('info', 'Interfaces disponíveis: ' + n.interfaces.map(i=>i.name).join(', '));
-      return;
-    }
-    cliIfaceCtx = { nodeId: n.id, ifaceIndex: ifIdx, ifaceName: n.interfaces[ifIdx].name };
-    cliLog('ok', `${n.name}(config-if)# [${n.interfaces[ifIdx].name}]`);
-    return;
-  }
+  if (c === 'configure terminal' || c === 'conf t') { cliLog('ok','Enter configuration commands, one per line. End with CNTL/Z.'); cliLog('ok',n.name+'(config)#'); return; }
+  if (c === 'exit' || c === 'end') { cliLog('ok',n.name+'#'); return; }
   if (c.startsWith('ping ')) { runPing(n, cmd.split(' ')[1]); return; }
   if (c.startsWith('traceroute ')) { runTraceroute(n, cmd.split(' ')[1]); return; }
 
@@ -1377,9 +1287,7 @@ function runPing(n, dst) {
     return;
   }
   cliLog('info',`Pingando ${dst} a partir de ${n.name}...`);
-  const result = routePacket(n, dst);
-  const reachable = result.reachable;
-  const target = nodes.find(nd => nd.ip === dst && nd.active !== false);
+  const reachable = target && isReachable(n, target);
   for (let i=1;i<=4;i++) {
     setTimeout(()=>{
       if (reachable) {
@@ -1392,8 +1300,6 @@ function runPing(n, dst) {
       if (i===4) {
         cliLog('','');
         cliLog('info',`Estatísticas: 4 pacotes enviados, ${reachable?4:0} recebidos, ${reachable?0:100}% perdidos`);
-        if (!reachable) cliLog('warn', `Motivo: ${result.reason}`);
-        if (reachable) showProperties(n); // refresh ARP table
       }
     }, 200 * i);
   }
@@ -1402,208 +1308,39 @@ function runPing(n, dst) {
 function runTraceroute(n, dst) {
   if (!dst) { cliLog('err','Uso: traceroute [ip]'); return; }
   cliLog('info',`Traceroute para ${dst}:`);
-  const result = routePacket(n, dst);
-  if (!result.reachable || !result.path.length) {
+  const target = nodes.find(nd => nd.ip === dst);
+  const hops = target ? findPath(n, target) : [];
+  if (!hops.length) { setTimeout(()=>cliLog('err','* * * Destino inacessível'),300); return; }
+  hops.forEach((hop,i) => {
     setTimeout(()=>{
-      cliLog('err','* * * Destino inacessível');
-      if (result.reason) cliLog('warn', `Motivo: ${result.reason}`);
-    }, 300);
-    return;
-  }
-  const hops = result.path;
-  const startTTL = 128;
-  hops.forEach((hop, i) => {
-    setTimeout(() => {
-      const ms = Math.floor(Math.random() * 20 + 1);
-      const ttl = startTTL - i;
-      cliLog('ok', ` ${String(i+1).padStart(2)}  ${(hop.ip || hop.name).padEnd(18)} ${ms} ms  TTL=${ttl}  [${hop.name}]`);
-    }, 300 * (i + 1));
+      const ms = Math.floor(Math.random()*20+1);
+      cliLog('ok',` ${String(i+1).padStart(2)}  ${(hop.ip||hop.name).padEnd(18)} ${ms} ms`);
+    }, 300*(i+1));
   });
 }
 
-// ══════════════════════════════════════════
-//  NETWORK ENGINE — Subnet-aware routing
-// ══════════════════════════════════════════
-
-function ipToInt(ip) {
-  if (!ip) return 0;
-  return ip.split('.').reduce((acc, oct) => (acc << 8) | parseInt(oct), 0) >>> 0;
+function isReachable(src, dst) {
+  return findPath(src, dst).length > 0;
 }
 
-function maskToInt(mask) {
-  if (!mask) return 0xFFFFFF00;
-  if (mask.includes('.')) return ipToInt(mask);
-  // CIDR prefix
-  const bits = parseInt(mask);
-  return bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
-}
-
-function sameSubnet(ip1, mask1, ip2) {
-  if (!ip1 || !ip2) return false;
-  const m = maskToInt(mask1 || '255.255.255.0');
-  return (ipToInt(ip1) & m) === (ipToInt(ip2) & m);
-}
-
-function getNetworkAddr(ip, mask) {
-  if (!ip) return null;
-  const m = maskToInt(mask || '255.255.255.0');
-  return (ipToInt(ip) & m) >>> 0;
-}
-
-// Physical BFS — ignores IP, just follows links (used internally)
-function findPhysicalPath(src, dst) {
+function findPath(src, dst) {
+  // BFS
   const visited = new Set();
   const queue = [[src]];
   while (queue.length) {
     const path = queue.shift();
-    const cur = path[path.length - 1];
+    const cur = path[path.length-1];
     if (cur.id === dst.id) return path;
     if (visited.has(cur.id)) continue;
     visited.add(cur.id);
-    links.filter(l => (l.src === cur.id || l.dst === cur.id) && l.active).forEach(lk => {
-      const nId = lk.src === cur.id ? lk.dst : lk.src;
+    const neighbors = links.filter(l => (l.src===cur.id||l.dst===cur.id) && l.active);
+    neighbors.forEach(lk => {
+      const nId = lk.src===cur.id?lk.dst:lk.src;
       const nb = getNode(nId);
-      if (nb && nb.active !== false && !visited.has(nId)) queue.push([...path, nb]);
+      if (nb && !visited.has(nId)) queue.push([...path, nb]);
     });
   }
   return [];
-}
-
-// Returns the router physically connected to this node (via switch or direct)
-function findConnectedRouter(node) {
-  const visited = new Set([node.id]);
-  const queue = [node];
-  while (queue.length) {
-    const cur = queue.shift();
-    const neighbors = links
-      .filter(l => (l.src === cur.id || l.dst === cur.id) && l.active)
-      .map(l => getNode(l.src === cur.id ? l.dst : l.src))
-      .filter(n => n && n.active !== false && !visited.has(n.id));
-    for (const nb of neighbors) {
-      visited.add(nb.id);
-      if (nb.type === 'router' || nb.type === 'router3layer') return nb;
-      // allow traversal through switches only
-      if (nb.type === 'switch' || nb.type === 'switch3layer') queue.push(nb);
-    }
-  }
-  return null;
-}
-
-// Find router that has an interface on the given subnet
-function findRouterForSubnet(networkAddr, mask, excludeId) {
-  return nodes.find(n => {
-    if (n.type !== 'router' && n.type !== 'router3layer') return false;
-    if (n.id === excludeId) return false;
-    if (n.active === false) return false;
-    // Check main IP
-    if (n.ip && getNetworkAddr(n.ip, mask) === networkAddr) return true;
-    // Check interfaces
-    return (n.interfaces || []).some(ifc => ifc.ip && getNetworkAddr(ifc.ip, mask) === networkAddr);
-  });
-}
-
-// Core routing decision:
-// Returns { reachable: bool, path: [...nodes], reason: string }
-function routePacket(src, dstIp) {
-  if (!src.ip || !dstIp) return { reachable: false, path: [], reason: 'IP não configurado na origem.' };
-
-  const dstNode = nodes.find(n => n.ip === dstIp && n.active !== false && n.type !== 'note' && !n.ipConflict);
-  if (!dstNode) return { reachable: false, path: [], reason: `Host ${dstIp} não encontrado ou inativo.` };
-  if (dstNode.ipConflict) return { reachable: false, path: [], reason: `Conflito de IP em ${dstIp}.` };
-
-  const srcMask = src.mask || '255.255.255.0';
-  const dstMask = dstNode.mask || '255.255.255.0';
-
-  // Same subnet — direct delivery
-  if (sameSubnet(src.ip, srcMask, dstIp)) {
-    const physPath = findPhysicalPath(src, dstNode);
-    if (physPath.length > 0) {
-      updateArp(src, dstNode);
-      return { reachable: true, path: physPath, reason: 'Entrega direta (mesma sub-rede).' };
-    }
-    return { reachable: false, path: [], reason: 'Sem caminho físico na sub-rede.' };
-  }
-
-  // Different subnet — need gateway
-  if (!src.gateway) {
-    return { reachable: false, path: [], reason: `Gateway não configurado em ${src.name}. Configure o default gateway.` };
-  }
-
-  // Find the gateway node
-  const gwNode = nodes.find(n => n.ip === src.gateway && n.active !== false);
-  if (!gwNode) {
-    return { reachable: false, path: [], reason: `Gateway ${src.gateway} não encontrado na rede.` };
-  }
-  if (gwNode.type !== 'router' && gwNode.type !== 'router3layer') {
-    return { reachable: false, path: [], reason: `Gateway ${src.gateway} não é um roteador.` };
-  }
-
-  // Physical path to gateway
-  const pathToGw = findPhysicalPath(src, gwNode);
-  if (!pathToGw.length) {
-    return { reachable: false, path: [], reason: `Sem caminho físico até o gateway ${src.gateway}.` };
-  }
-
-  // Router checks its routing table or directly connected interfaces
-  const dstNetAddr = getNetworkAddr(dstIp, dstMask);
-
-  // Check if router has direct interface on dst subnet
-  const routerHasDirectRoute = (gwNode.ip && getNetworkAddr(gwNode.ip, dstMask) === dstNetAddr) ||
-    (gwNode.interfaces || []).some(ifc => ifc.ip && ifc.status !== 'down' && getNetworkAddr(ifc.ip, dstMask) === dstNetAddr);
-
-  // Check static routes on router
-  let routeFound = routerHasDirectRoute;
-  if (!routeFound && gwNode.routing?.length) {
-    routeFound = gwNode.routing.some(r => {
-      const rNet = getNetworkAddr(r.network, r.mask);
-      const rMask = maskToInt(r.mask);
-      return (ipToInt(dstIp) & rMask) >>> 0 === rNet;
-    });
-  }
-
-  if (!routeFound) {
-    return {
-      reachable: false, path: [],
-      reason: `Roteador ${gwNode.name} não possui rota para a rede ${dstIp}. Configure: ip route [rede] [máscara] [nexthop]`
-    };
-  }
-
-  // Physical path from router to destination
-  const pathFromGw = findPhysicalPath(gwNode, dstNode);
-  if (!pathFromGw.length) {
-    return { reachable: false, path: [], reason: `Sem caminho físico do roteador até ${dstIp}.` };
-  }
-
-  // Check dst gateway matches router IP on that subnet
-  if (dstNode.gateway && dstNode.gateway !== gwNode.ip) {
-    // dst has a different gateway — find it
-    const dstGwNode = nodes.find(n => n.ip === dstNode.gateway && n.active !== false);
-    if (!dstGwNode) {
-      return { reachable: false, path: [], reason: `Gateway do destino (${dstNode.gateway}) não encontrado.` };
-    }
-  }
-
-  // Full path: src → ... → router → ... → dst (deduplicate)
-  const fullPath = [...pathToGw, ...pathFromGw.slice(1)];
-  updateArp(src, gwNode);
-  updateArp(gwNode, dstNode);
-  return { reachable: true, path: fullPath, reason: 'Roteamento via ' + gwNode.name };
-}
-
-function updateArp(node, peer) {
-  if (!node.ip || !peer.ip) return;
-  if (!node.arp) node.arp = [];
-  const existing = node.arp.find(a => a.ip === peer.ip);
-  const mac = peer.mac || ('AA:BB:' + peer.id.slice(-4).toUpperCase().match(/.{1,2}/g)?.join(':') || '00:00');
-  if (!existing) node.arp.push({ ip: peer.ip, mac });
-}
-
-function isReachable(src, dst) {
-  return routePacket(src, dst.ip).reachable;
-}
-
-function findPath(src, dst) {
-  return routePacket(src, dst.ip).path;
 }
 
 function animatePacket(src, dst) {
@@ -1654,9 +1391,8 @@ function executePing() {
     return;
   }
 
-  const result = routePacket(src, dst);
-  const reachable = result.reachable;
-  const target = nodes.find(n => n.ip === dst && n.active !== false);
+  const target = targets[0];
+  const reachable = target && isReachable(src, target);
 
   if (cmd === 'ping') {
     out.innerHTML = `<span style="color:var(--accent)">Pingando ${dst} a partir de ${src.name}...</span><br>`;
@@ -1669,26 +1405,18 @@ function executePing() {
         } else {
           out.innerHTML += `<span style="color:var(--accent-red)">Tempo limite esgotado.</span><br>`;
         }
-        if (i===4) {
-          out.innerHTML += `<br><span style="color:var(--accent)">Estatísticas: 4 enviados, ${reachable?4:0} recebidos, ${reachable?0:100}% perdidos</span>`;
-          if (!reachable) out.innerHTML += `<br><span style="color:var(--accent-yellow)">Motivo: ${result.reason}</span>`;
-          if (reachable) showProperties(src);
-        }
+        if (i===4) out.innerHTML += `<br><span style="color:var(--accent)">Estatísticas: 4 enviados, ${reachable?4:0} recebidos, ${reachable?0:100}% perdidos</span>`;
         out.scrollTop = out.scrollHeight;
       }, 300*i);
     }
   } else {
     out.innerHTML = `<span style="color:var(--accent)">Traceroute para ${dst}:</span><br>`;
-    if (!result.reachable || !result.path.length) {
-      out.innerHTML += `<span style="color:var(--accent-red)">* * * Destino inacessível</span>`;
-      if (result.reason) out.innerHTML += `<br><span style="color:var(--accent-yellow)">Motivo: ${result.reason}</span>`;
-      return;
-    }
-    result.path.forEach((hop, i) => {
-      setTimeout(() => {
-        const ms = Math.floor(Math.random() * 20 + 1);
-        const ttl = 128 - i;
-        out.innerHTML += `<span style="color:var(--accent-green)"> ${String(i+1).padStart(2)}  ${(hop.ip||hop.name).padEnd(18)} ${ms} ms  TTL=${ttl}  [${hop.name}]</span><br>`;
+    const hops = target ? findPath(src, target) : [];
+    if (!hops.length) { out.innerHTML += `<span style="color:var(--accent-red)">* * * Destino inacessível</span>`; return; }
+    hops.forEach((hop,i) => {
+      setTimeout(()=>{
+        const ms = Math.floor(Math.random()*20+1);
+        out.innerHTML += `<span style="color:var(--accent-green)"> ${String(i+1).padStart(2)}  ${(hop.ip||hop.name).padEnd(18)} ${ms} ms</span><br>`;
         out.scrollTop = out.scrollHeight;
       }, 300*(i+1));
     });
