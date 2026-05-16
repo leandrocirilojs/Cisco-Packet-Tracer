@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <link rel="icon" href="https://img.icons8.com/?size=100&id=eyShSycUjhR9&format=png&color=000000" type="image/png">
-<script src="app.js"></script>
+<script  src="app.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NetSim Pro — Simulador de Redes</title>
 <link rel="stylesheet" href="styles.css">
@@ -321,6 +321,49 @@
   </div>
 </div>
 
+<!-- DISPOSITIVO (estilo Packet Tracer) -->
+<div class="modal-overlay" id="device-desk-modal">
+  <div class="modal modal-desk">
+    <div class="modal-header">
+      <div class="desk-head">
+        <span class="desk-head-icon" id="desk-device-icon">📦</span>
+        <div>
+          <div class="modal-title desk-head-title" id="desk-device-title">Dispositivo</div>
+          <div class="desk-head-sub" id="desk-device-sub">—</div>
+        </div>
+      </div>
+      <div class="modal-close" onclick="closeDeviceDesk()">✕</div>
+    </div>
+    <div class="desk-tab-strip">
+      <div class="desk-tab active" data-desk-tab="config" onclick="switchDeskTab('config')">Configuração</div>
+      <div class="desk-tab" data-desk-tab="cli" onclick="switchDeskTab('cli')">CLI</div>
+      <div class="desk-tab desk-tab-hide" id="desk-tab-routes" data-desk-tab="routes" onclick="switchDeskTab('routes')">Rotas</div>
+      <div class="desk-tab" data-desk-tab="arp" onclick="switchDeskTab('arp')">ARP</div>
+      <div class="desk-tab" data-desk-tab="physical" onclick="switchDeskTab('physical')">Físico</div>
+      <div class="desk-tab desk-tab-hide" id="desk-tab-services" data-desk-tab="services" onclick="switchDeskTab('services')">Serviços / Apps</div>
+    </div>
+    <div class="modal-body desk-modal-body">
+      <div id="desk-panel-config" class="desk-panel" data-desk-panel="config"></div>
+      <div id="desk-panel-cli" class="desk-panel" data-desk-panel="cli" style="display:none">
+        <p class="desk-cli-note">Mesma CLI do equipamento — comandos <b>IOS style</b> (enable, conf t, ping, etc.).</p>
+        <div id="desk-cli-output" class="desk-cli-out"></div>
+        <div class="cli-input-row desk-cli-row">
+          <div class="cli-prompt-label" id="desk-cli-prompt">...</div>
+          <input type="text" id="desk-cli-input" class="desk-cli-input-field" placeholder="Comando..." autocomplete="off" onkeydown="deskCliKeyDown(event)">
+        </div>
+      </div>
+      <div id="desk-panel-routes" class="desk-panel" data-desk-panel="routes" style="display:none"></div>
+      <div id="desk-panel-arp" class="desk-panel" data-desk-panel="arp" style="display:none"></div>
+      <div id="desk-panel-physical" class="desk-panel" data-desk-panel="physical" style="display:none"></div>
+      <div id="desk-panel-services" class="desk-panel" data-desk-panel="services" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <span class="desk-footer-hint">Duplo clique no canvas abre esta janela</span>
+      <button class="btn btn-secondary" onclick="closeDeviceDesk()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- HELP MODAL -->
 <div class="modal-overlay" id="help-modal">
   <div class="modal">
@@ -331,7 +374,8 @@
     <div class="modal-body" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">
       <b style="color:var(--text-primary)">Adicionar Dispositivos</b><br>
       • Arraste da barra lateral para o canvas<br>
-      • Ou dê duplo clique no dispositivo<br><br>
+      • Ou dê duplo clique na <b>lista</b> da barra lateral para inserir<br>
+      • <b>Duplo clique no dispositivo no canvas</b> abre a janela (estilo Packet Tracer: Config, CLI, Rotas…)<br><br>
       <b style="color:var(--text-primary)">Conectar Dispositivos</b><br>
       • Pressione <kbd style="background:var(--bg-item);padding:1px 5px;border-radius:2px;color:#fff">C</kbd> ou clique em 🔗<br>
       • Origem → destino: abre janela para <b>tipo de cabo</b> e <b>portas</b><br>
