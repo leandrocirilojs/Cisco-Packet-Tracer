@@ -53,6 +53,9 @@ function ensureNodeDefaults(n) {
     if (!n.vlans || typeof n.vlans !== 'object') n.vlans = { 1: { name: 'default' } };
     if (!n.vlans[1]) n.vlans[1] = { name: 'default' };
   }
+  if (['server','pc','laptop'].includes(n.type) && !n.services) {
+    n.services = { http:false, dns:false, dhcp:false };
+  }
   (n.interfaces || []).forEach(iface => {
     if (iface.adminDown === undefined) iface.adminDown = false;
     if (isSwitchNode(n)) {
@@ -149,6 +152,8 @@ function cableOkForDevices(srcId, dstId, cable) {
 }
 
 let pendingLinkPair = null;
+let deskModalNodeId = null;
+let deskActiveTab = 'config';
 
 function populateLinkCableSelect(srcId, dstId) {
   const sel = document.getElementById('link-cable-type');
@@ -348,6 +353,7 @@ function render() {
     g.addEventListener('mousedown', e => nodeMouseDown(e, n.id));
     g.addEventListener('contextmenu', e => showCtxMenu(e, n.id));
     g.addEventListener('click', e => nodeClick(e, n.id));
+    g.addEventListener('dblclick', e => nodeDblClick(e, n.id));
     g.addEventListener('mouseenter', e => showTooltip(e, n));
     g.addEventListener('mouseleave', hideTooltip);
   });
@@ -408,6 +414,9 @@ function addNode(type, x, y) {
     routing: [],
     arp: []
   };
+  if (['server','pc','laptop'].includes(type)) {
+    n.services = { http:false, dns:false, dhcp:false };
+  }
   pushUndo();
   nodes.push(n);
   ensureNodeDefaults(n);
@@ -524,8 +533,21 @@ function linkClick(e, id) {
 // ══════════════════════════════════════════
 //  MOUSE EVENTS
 // ══════════════════════════════════════════
+function nodeDblClick(e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  const n = getNode(id);
+  if (!n || n.type === 'note') return;
+  if (!DEVICE_META[n.type]) return;
+  if (mode === 'connect') {
+    connectSource = null;
+    closeModal('link-modal');
+    pendingLinkPair = null;
+  }
+  openDeviceDesk(id);
+}
+
 function nodeMouseDown(e, id) {
-  if (e.button !== 0) return;
   e.stopPropagation();
   if (mode === 'connect') return;
   if (mode === 'delete') return;
@@ -803,9 +825,8 @@ function updateIface(nodeId, idx, key, val) {
 // ══════════════════════════════════════════
 //  CLI
 // ══════════════════════════════════════════
-function cliLog(type, msg) {
-  const out = document.getElementById('cli-output');
-  if (currentCliTab !== 'terminal' && currentCliTab !== 'events') return;
+function appendCliLine(out, type, msg) {
+  if (!out) return;
   const classes = { ok:'cli-ok', err:'cli-err', info:'cli-info', warn:'cli-warn', '':'cli-cmd' };
   const div = document.createElement('div');
   div.className = 'cli-line ' + (classes[type]||'');
@@ -814,8 +835,24 @@ function cliLog(type, msg) {
   out.scrollTop = out.scrollHeight;
 }
 
+function cliLog(type, msg) {
+  const mainOut = document.getElementById('cli-output');
+  if (currentCliTab === 'terminal' || currentCliTab === 'events') {
+    appendCliLine(mainOut, type, msg);
+  }
+  const deskModal = document.getElementById('device-desk-modal');
+  const deskOut = document.getElementById('desk-cli-output');
+  if (deskModal?.classList.contains('open') && deskOut) {
+    appendCliLine(deskOut, type, msg);
+  }
+}
+
 function updateCliPrompt(n) {
   document.getElementById('cli-prompt-label').textContent = cliPromptString(n);
+  const dp = document.getElementById('desk-cli-prompt');
+  if (dp && n && deskModalNodeId && n.id === deskModalNodeId) {
+    dp.textContent = cliPromptString(n);
+  }
 }
 
 function cliKeyDown(e) {
@@ -895,7 +932,12 @@ function processCommand(cmd, n, execOverride = false) {
     cliLog('','  <b>clear</b>, <b>write memory</b>');
     return;
   }
-  if (lc === 'clear') { document.getElementById('cli-output').innerHTML = ''; return; }
+  if (lc === 'clear') {
+    document.getElementById('cli-output').innerHTML = '';
+    const dmo = document.getElementById('desk-cli-output');
+    if (document.getElementById('device-desk-modal')?.classList.contains('open') && dmo) dmo.innerHTML = '';
+    return;
+  }
   if (lc === 'show version') {
     cliLog('ok','NetSim Pro v1.1 — emulação IOS simplificada');
     cliLog('','Sistema operacional: NetSim IOS 15.1(1)T');
@@ -1426,6 +1468,382 @@ function animatePacket(src, dst) {
 }
 
 // ══════════════════════════════════════════
+//  DISPOSITIVO — janela estilo Packet Tracer
+// ══════════════════════════════════════════
+
+function escDesk(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function escDeskAttr(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function refreshDeskAllPanels(n) {
+  if (!n || deskModalNodeId !== n.id) return;
+  refreshDeskConfig(n);
+  refreshDeskRoutes(n);
+  refreshDeskArp(n);
+  refreshDeskPhysical(n);
+  refreshDeskServices(n);
+}
+
+function refreshDeskConfig(n) {
+  ensureNodeDefaults(n);
+  const el = document.getElementById('desk-panel-config');
+  if (!el) return;
+  const m = DEVICE_META[n.type];
+  const showHostTcp = m && !['cloud','internet','switch','switch3layer'].includes(n.type);
+
+  let html = '';
+
+  const hasConflict = !!(n.ip && nodes.filter(nd => nd.ip === n.ip && nd.id !== n.id && nd.type !== 'note').length);
+  if (n.ipConflict || hasConflict) {
+    html += `<div class="desk-warn-banner">⚠ <b>Conflito de IP</b> — Este endereço está duplicado; tráfego pode falhar.</div>`;
+  }
+
+  html += `<div class="desk-section-title">Identificação</div>
+    <div class="desk-prop-row"><span class="desk-prop-label">Nome</span><input class="desk-input" id="desk-gui-name" type="text" value="${escDeskAttr(n.name)}"></div>
+    <div class="desk-prop-row desk-prop-checkbox"><label><input type="checkbox" id="desk-gui-active" ${n.active !== false ? 'checked' : ''}> Dispositivo ativo</label></div>`;
+
+  if (showHostTcp) {
+    html += `<div class="desk-section-title">TCP/IP (host)</div>
+      <div class="desk-prop-row"><span class="desk-prop-label">IP</span><input class="desk-input" id="desk-gui-host-ip" placeholder="192.168.1.10" value="${escDeskAttr(n.ip||'')}"></div>
+      <div class="desk-prop-row"><span class="desk-prop-label">Máscara</span><input class="desk-input" id="desk-gui-host-mask" value="${escDeskAttr(n.mask||'255.255.255.0')}"></div>
+      <div class="desk-prop-row"><span class="desk-prop-label">Gateway</span><input class="desk-input" id="desk-gui-host-gw" placeholder="192.168.1.254" value="${escDeskAttr(n.gateway||'')}"></div>`;
+  }
+
+  if (isSwitchNode(n) && n.vlans) {
+    const ids = Object.keys(n.vlans).map(Number).filter(x => !isNaN(x)).sort((a,b)=>a-b);
+    html += `<div class="desk-section-title">VLANs</div>`;
+    if (ids.length) {
+      html += `<table class="desk-table desk-vlan-table"><thead><tr><th>ID</th><th>Nome</th></tr></thead><tbody>`;
+      ids.forEach(vid => {
+        const vn = n.vlans[vid]?.name ?? '';
+        html += `<tr><td>${vid}</td><td>${escDesk(vn)}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+    html += `<div class="desk-inline-add">
+      <span class="desk-prop-label">Nova VLAN ID</span>
+      <input class="desk-input desk-input-sm" id="desk-new-vlan-id" type="number" min="1" max="4094" placeholder="10">
+      <button type="button" class="btn btn-secondary desk-inline-btn" onclick="deskAddVlanGui()">Adicionar</button>
+    </div>`;
+  }
+
+  html += `<div class="desk-section-title">Interfaces</div>`;
+  (n.interfaces || []).forEach((iface, i) => {
+    const admChk = iface.adminDown ? 'checked' : '';
+    html += `<div class="desk-iface-card">
+      <div class="desk-iface-title">${escDesk(iface.name)}</div>`;
+    if (isSwitchNode(n)) {
+      const mode = iface.switchportMode === 'trunk' ? 'trunk' : 'access';
+      html += `<div class="desk-prop-row desk-prop-tight"><span class="desk-prop-label">Modo</span>
+        <select class="desk-input" id="desk-gui-if-${i}-mode">
+          <option value="access"${mode === 'access' ? ' selected' : ''}>access</option>
+          <option value="trunk"${mode === 'trunk' ? ' selected' : ''}>trunk</option>
+        </select></div>`;
+      html += `<div class="desk-prop-row desk-prop-tight" id="desk-gui-if-${i}-vlan-row" style="display:${mode === 'access' ? 'flex' : 'none'}"><span class="desk-prop-label">VLAN access</span>
+        <input class="desk-input desk-input-sm" id="desk-gui-if-${i}-vlan" type="number" min="1" max="4094" value="${iface.accessVlan ?? 1}"></div>`;
+    }
+    html += `<div class="desk-prop-row"><span class="desk-prop-label">IP</span><input class="desk-input" id="desk-gui-if-${i}-ip" placeholder="opcional / L3" value="${escDeskAttr(iface.ip||'')}"></div>
+      <div class="desk-prop-row"><span class="desk-prop-label">Máscara</span><input class="desk-input" id="desk-gui-if-${i}-mask" value="${escDeskAttr(iface.mask||'255.255.255.0')}"></div>
+      <div class="desk-prop-row"><span class="desk-prop-label">Descrição</span><input class="desk-input" id="desk-gui-if-${i}-desc" placeholder="—" value="${escDeskAttr(iface.description||'')}"></div>
+      <div class="desk-prop-row desk-prop-checkbox"><label><input type="checkbox" id="desk-gui-if-${i}-down" ${admChk}> Shutdown administrativo</label></div>`;
+    if (!isSwitchNode(n)) {
+      html += `<div class="desk-iface-hint">${iface.status === 'up' ? '🟢 Up' : '🔴 Down'} (ligação física)</div>`;
+    }
+    html += `</div>`;
+  });
+
+  html += `<div class="desk-config-actions"><button type="button" class="btn btn-primary" onclick="applyDeskGuiConfig()">Aplicar configuração</button></div>`;
+  el.innerHTML = html;
+
+  if (isSwitchNode(n)) {
+    (n.interfaces || []).forEach((iface, i) => {
+      const sel = document.getElementById(`desk-gui-if-${i}-mode`);
+      const row = document.getElementById(`desk-gui-if-${i}-vlan-row`);
+      if (sel && row) {
+        sel.onchange = () => { row.style.display = sel.value === 'access' ? 'flex' : 'none'; };
+      }
+    });
+  }
+}
+
+function refreshDeskRoutes(n) {
+  const el = document.getElementById('desk-panel-routes');
+  if (!el) return;
+  ensureNodeDefaults(n);
+  let html = `<div class="desk-section-title">Rotas estáticas</div>`;
+  if (n.routing?.length) {
+    html += `<table class="desk-table"><thead><tr><th>Rede</th><th>Next-hop</th><th>Mét.</th><th></th></tr></thead><tbody>`;
+    n.routing.forEach((r, idx) => {
+      html += `<tr><td>${escDesk(r.network)}/${escDesk(String(r.prefix))}</td><td>${escDesk(r.nexthop)}</td><td>${escDesk(String(r.metric))}</td>` +
+        `<td><button type="button" class="btn btn-secondary desk-row-btn" onclick="deskRemoveStaticRoute(${idx})">Remover</button></td></tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<p class="desk-muted">Nenhuma rota estática. Equivalente CLI: <code>ip route &lt;rede&gt; &lt;máscara&gt; &lt;nexthop&gt;</code></p>`;
+  }
+  html += `<div class="desk-inline-add desk-routes-add">
+    <input class="desk-input" id="desk-rt-net" placeholder="rede">
+    <input class="desk-input" id="desk-rt-mask" placeholder="máscara">
+    <input class="desk-input" id="desk-rt-nh" placeholder="nexthop">
+    <input class="desk-input desk-input-sm" id="desk-rt-met" placeholder="métrica" value="1">
+    <button type="button" class="btn btn-primary desk-inline-btn" onclick="deskAddStaticRoute()">Adicionar</button>
+  </div>`;
+  el.innerHTML = html;
+}
+
+function refreshDeskArp(n) {
+  const el = document.getElementById('desk-panel-arp');
+  if (!el) return;
+  let html = `<div class="desk-section-title">Tabela ARP</div>`;
+  if (n.arp?.length) {
+    html += `<table class="desk-table"><thead><tr><th>Endereço</th><th>MAC</th></tr></thead><tbody>`;
+    n.arp.forEach(a => {
+      html += `<tr><td>${escDesk(a.ip)}</td><td>${escDesk(a.mac)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<p class="desk-muted">Vazia — execute pings para popular.</p>`;
+  }
+  el.innerHTML = html;
+}
+
+function refreshDeskPhysical(n) {
+  const el = document.getElementById('desk-panel-physical');
+  if (!el) return;
+  ensureNodeDefaults(n);
+  let html = `<div class="desk-section-title">Interfaces físicas</div>`;
+  (n.interfaces || []).forEach(iface => {
+    const adm = iface.adminDown ? ' · 🔒 Admin down' : '';
+    html += `<div class="desk-phys-row"><span class="desk-phys-name">${escDesk(iface.name)}</span>
+      <span class="desk-phys-st">${iface.status === 'up' ? '🟢 Up' : '🔴 Down'}${adm}</span></div>`;
+  });
+  const myLinks = links.filter(l => l.src === n.id || l.dst === n.id);
+  if (myLinks.length) {
+    html += `<div class="desk-section-title">Cabos (${myLinks.length})</div>`;
+    myLinks.forEach(lk => {
+      const peer = getNode(lk.src === n.id ? lk.dst : lk.src);
+      const myIF = lk.src === n.id ? lk.srcIface : lk.dstIface;
+      const ct = ({ ethernet:'Ethernet', crossover:'Crossover', fiber:'Fibra', serial:'Serial', wireless:'Wireless' })[lk.type] || lk.type;
+      html += `<div class="desk-phys-row"><span>${escDesk(peer?.name || '?')} <span class="desk-muted-small">(${escDesk(ct)})</span></span>` +
+        `<span class="desk-muted-small">porta ${escDesk(myIF || '?')}</span></div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function refreshDeskServices(n) {
+  const el = document.getElementById('desk-panel-services');
+  if (!el) return;
+  if (!['server','pc','laptop'].includes(n.type)) {
+    el.innerHTML = `<p class="desk-muted">Sem serviços neste tipo de equipamento.</p>`;
+    return;
+  }
+  ensureNodeDefaults(n);
+  const s = n.services || { http:false, dns:false, dhcp:false };
+  el.innerHTML = `
+    <div class="desk-section-title">Serviços (marcações — simulação limitada)</div>
+    <div class="desk-svc-grid">
+      <label class="desk-svc-opt"><input type="checkbox" id="desk-svc-http" ${s.http ? 'checked' : ''}> HTTP</label>
+      <label class="desk-svc-opt"><input type="checkbox" id="desk-svc-dns" ${s.dns ? 'checked' : ''}> DNS</label>
+      <label class="desk-svc-opt"><input type="checkbox" id="desk-svc-dhcp" ${s.dhcp ? 'checked' : ''}> DHCP</label>
+    </div>
+    <button type="button" class="btn btn-primary desk-svc-btn" onclick="applyDeskServices()">Aplicar serviços</button>
+  `;
+}
+
+function openDeviceDesk(id) {
+  const n = getNode(id);
+  if (!n || n.type === 'note' || !DEVICE_META[n.type]) return;
+  deskModalNodeId = id;
+  deskActiveTab = 'config';
+  select(id);
+  ensureNodeDefaults(n);
+  const m = DEVICE_META[n.type];
+  document.getElementById('desk-device-icon').textContent = m.icon;
+  document.getElementById('desk-device-title').textContent = n.name;
+  document.getElementById('desk-device-sub').textContent = `${m.label} · ${n.type}`;
+
+  const showRt = ['router','router3layer','switch3layer'].includes(n.type);
+  document.getElementById('desk-tab-routes').classList.toggle('desk-tab-hide', !showRt);
+
+  const showSvc = ['server','pc','laptop'].includes(n.type);
+  document.getElementById('desk-tab-services').classList.toggle('desk-tab-hide', !showSvc);
+
+  const dout = document.getElementById('desk-cli-output');
+  if (dout) dout.innerHTML = '';
+  const inp = document.getElementById('desk-cli-input');
+  if (inp) inp.value = '';
+
+  refreshDeskAllPanels(n);
+  document.getElementById('desk-cli-prompt').textContent = cliPromptString(n);
+  document.getElementById('device-desk-modal').classList.add('open');
+  switchDeskTab('config');
+}
+
+function closeDeviceDesk() {
+  deskModalNodeId = null;
+  deskActiveTab = 'config';
+  closeModal('device-desk-modal');
+}
+
+function switchDeskTab(tab) {
+  deskActiveTab = tab;
+  document.querySelectorAll('#device-desk-modal .desk-tab').forEach(t => {
+    if (t.classList.contains('desk-tab-hide')) return;
+    t.classList.toggle('active', (t.dataset.deskTab === tab));
+  });
+  document.querySelectorAll('#device-desk-modal .desk-panel').forEach(p => {
+    p.style.display = p.dataset.deskPanel === tab ? 'block' : 'none';
+  });
+  const n = deskModalNodeId ? getNode(deskModalNodeId) : null;
+  if (tab === 'cli' && n) {
+    document.getElementById('desk-cli-prompt').textContent = cliPromptString(n);
+    setTimeout(() => document.getElementById('desk-cli-input')?.focus(), 80);
+  }
+}
+
+function deskAddVlanGui() {
+  const n = getNode(deskModalNodeId);
+  const raw = document.getElementById('desk-new-vlan-id')?.value;
+  const vid = parseInt(raw, 10);
+  if (!n || !isSwitchNode(n) || isNaN(vid) || vid < 1 || vid > 4094) return;
+  pushUndo();
+  if (!n.vlans) n.vlans = { 1: { name: 'default' } };
+  if (!n.vlans[vid]) n.vlans[vid] = { name: 'VLAN' + String(vid).padStart(4, '0') };
+  document.getElementById('desk-new-vlan-id').value = '';
+  render();
+  refreshDeskAllPanels(getNode(deskModalNodeId));
+}
+
+function deskAddStaticRoute() {
+  const n = getNode(deskModalNodeId);
+  const net = document.getElementById('desk-rt-net')?.value.trim();
+  const mask = document.getElementById('desk-rt-mask')?.value.trim();
+  const nh = document.getElementById('desk-rt-nh')?.value.trim();
+  const metric = document.getElementById('desk-rt-met')?.value.trim() || '1';
+  if (!n || !net || !mask || !nh) return;
+  pushUndo();
+  if (!n.routing) n.routing = [];
+  n.routing.push({ network: net, mask, nexthop: nh, metric, prefix: maskToPrefix(mask) });
+  document.getElementById('desk-rt-net').value = '';
+  document.getElementById('desk-rt-mask').value = '';
+  document.getElementById('desk-rt-nh').value = '';
+  document.getElementById('desk-rt-met').value = '1';
+  render(); showProperties(n);
+  refreshDeskAllPanels(n);
+}
+
+function deskRemoveStaticRoute(idx) {
+  const n = getNode(deskModalNodeId);
+  if (!n?.routing || idx < 0 || idx >= n.routing.length) return;
+  pushUndo();
+  n.routing.splice(idx, 1);
+  render(); showProperties(n);
+  refreshDeskAllPanels(n);
+}
+
+function applyDeskServices() {
+  const n = getNode(deskModalNodeId);
+  if (!n || !['server','pc','laptop'].includes(n.type)) return;
+  pushUndo();
+  ensureNodeDefaults(n);
+  n.services = n.services || { http:false, dns:false, dhcp:false };
+  n.services.http = !!document.getElementById('desk-svc-http')?.checked;
+  n.services.dns = !!document.getElementById('desk-svc-dns')?.checked;
+  n.services.dhcp = !!document.getElementById('desk-svc-dhcp')?.checked;
+  render(); showProperties(n);
+  refreshDeskServices(n);
+}
+
+function applyDeskGuiConfig() {
+  const n = getNode(deskModalNodeId);
+  if (!n) return;
+  pushUndo();
+
+  const nameEl = document.getElementById('desk-gui-name');
+  if (nameEl?.value.trim()) n.name = nameEl.value.trim();
+
+  const actEl = document.getElementById('desk-gui-active');
+  if (actEl) n.active = actEl.checked;
+
+  if (document.getElementById('desk-gui-host-ip')) {
+    n.mask = document.getElementById('desk-gui-host-mask')?.value.trim() || '255.255.255.0';
+    n.gateway = document.getElementById('desk-gui-host-gw')?.value.trim() || '';
+    updateProp(n.id, 'ip', document.getElementById('desk-gui-host-ip').value.trim());
+  }
+
+  (n.interfaces || []).forEach((iface, i) => {
+    const ipEl = document.getElementById(`desk-gui-if-${i}-ip`);
+    if (ipEl) iface.ip = ipEl.value.trim();
+    const mk = document.getElementById(`desk-gui-if-${i}-mask`);
+    if (mk) iface.mask = mk.value.trim() || '255.255.255.0';
+    const desc = document.getElementById(`desk-gui-if-${i}-desc`);
+    if (desc) iface.description = desc.value.trim();
+    const ad = document.getElementById(`desk-gui-if-${i}-down`);
+    if (ad) iface.adminDown = !!ad.checked;
+    const modeSel = document.getElementById(`desk-gui-if-${i}-mode`);
+    if (modeSel && isSwitchNode(n)) {
+      iface.switchportMode = modeSel.value === 'trunk' ? 'trunk' : 'access';
+      if (iface.switchportMode === 'access') {
+        const vEl = document.getElementById(`desk-gui-if-${i}-vlan`);
+        const v = parseInt(vEl?.value, 10);
+        if (!isNaN(v) && v >= 1 && v <= 4094) {
+          iface.accessVlan = v;
+          if (!n.vlans) n.vlans = { 1: { name: 'default' } };
+          if (!n.vlans[v]) n.vlans[v] = { name: 'VLAN' + String(v).padStart(4, '0') };
+        }
+      }
+    }
+  });
+
+  render();
+  showProperties(getNode(deskModalNodeId));
+  refreshDeskAllPanels(getNode(deskModalNodeId));
+}
+
+function deskCliKeyDown(e) {
+  const input = document.getElementById('desk-cli-input');
+  const n = getNode(deskModalNodeId);
+  if (!n) return;
+
+  if (e.key === 'Escape') {
+    closeDeviceDesk();
+    e.preventDefault();
+    return;
+  }
+
+  if (e.key === 'Enter') {
+    const cmd = input.value.trim();
+    if (!cmd) return;
+    cliHistory.unshift(cmd);
+    cliHistIdx = -1;
+    input.value = '';
+    const prompt = cliPromptString(n);
+    cliLog('', `<span class="cli-prompt">${escDesk(prompt)}</span> <span class="cli-cmd">${escDesk(cmd)}</span>`);
+    processCommand(cmd, n);
+    updateCliPrompt(n);
+    refreshDeskAllPanels(getNode(deskModalNodeId));
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    cliHistIdx = Math.min(cliHistIdx + 1, cliHistory.length - 1);
+    input.value = cliHistory[cliHistIdx] || '';
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    cliHistIdx = Math.max(cliHistIdx - 1, -1);
+    input.value = cliHistIdx >= 0 ? cliHistory[cliHistIdx] : '';
+    e.preventDefault();
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    autocomplete(input);
+  }
+}
+
+// ══════════════════════════════════════════
 //  PING MODAL
 // ══════════════════════════════════════════
 function openPingModal() {
@@ -1633,8 +2051,7 @@ function ctxOpenCli() {
 
 function ctxProperties() {
   if (!ctxTarget) return;
-  select(ctxTarget);
-  switchRpTab(document.querySelector('[data-tab="props"]'), 'props');
+  openDeviceDesk(ctxTarget);
 }
 
 function ctxPingFrom() {
@@ -1786,24 +2203,41 @@ function showAbout() {
 
 // Keyboard shortcuts
 function globalKeyDown(e) {
-  if (e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA') return;
-  if (e.key==='s'||e.key==='S') setMode('select');
-  else if (e.key==='c'||e.key==='C') setMode('connect');
-  else if (e.key==='x'||e.key==='X') setMode('delete');
-  else if (e.key==='n'||e.key==='N') addNote();
-  else if (e.key==='Delete'||e.key==='Backspace') deleteSelected();
-  else if (e.key==='Escape') {
-    if (document.getElementById('link-modal').classList.contains('open')) {
-      cancelLinkModal();
+  if (e.key === 'Escape') {
+    if (document.getElementById('device-desk-modal')?.classList.contains('open')) {
+      closeDeviceDesk();
+      e.preventDefault();
       return;
     }
-    setMode('select'); connectSource=null; render();
+    if (document.getElementById('link-modal')?.classList.contains('open')) {
+      cancelLinkModal();
+      e.preventDefault();
+      return;
+    }
+    if (document.getElementById('ping-modal')?.classList.contains('open')) {
+      closeModal('ping-modal');
+      e.preventDefault();
+      return;
+    }
+    if (document.getElementById('help-modal')?.classList.contains('open')) {
+      closeModal('help-modal');
+      e.preventDefault();
+      return;
+    }
+    setMode('select'); connectSource = null; render();
+    return;
   }
-  else if (e.ctrlKey&&e.key==='z') { e.preventDefault(); undoAction(); }
-  else if (e.ctrlKey&&e.key==='y') { e.preventDefault(); redoAction(); }
-  else if (e.ctrlKey&&e.key==='a') { e.preventDefault(); selectAll(); }
-  else if (e.ctrlKey&&e.key==='s') { e.preventDefault(); saveProject(); }
-  else if (e.ctrlKey&&e.key==='n') { e.preventDefault(); newProject(); }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 's' || e.key === 'S') setMode('select');
+  else if (e.key === 'c' || e.key === 'C') setMode('connect');
+  else if (e.key === 'x' || e.key === 'X') setMode('delete');
+  else if (e.key === 'n' || e.key === 'N') addNote();
+  else if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+  else if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undoAction(); }
+  else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redoAction(); }
+  else if (e.ctrlKey && e.key === 'a') { e.preventDefault(); selectAll(); }
+  else if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveProject(); }
+  else if (e.ctrlKey && e.key === 'n') { e.preventDefault(); newProject(); }
 }
 
 window.addEventListener('resize', render);
