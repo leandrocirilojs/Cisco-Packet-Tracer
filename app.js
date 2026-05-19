@@ -1,5 +1,4 @@
-
-// ═certo═════════════════════════════════════════
+// ══════════════════════════════════════════
 //  ESTADO GLOBAL
 // ══════════════════════════════════════════
 let nodes = [];
@@ -13,7 +12,7 @@ let isDraggingCanvas = false;
 let dragNodeId = null;
 let dragOffX = 0, dragOffY = 0;
 let panStartX = 0, panStartY = 0;
-let nodeCounter = { router:0, router3layer:0, switch:0, switch3layer:0, pc:0, laptop:0, server:0, printer:0, ap:0, smartphone:0, cloud:0, internet:0, modem:0, firewall:0, camera:0, sensor:0 };
+let nodeCounter = {};
 let undoStack = [], redoStack = [];
 let simMode = false;
 let cliHistory = [], cliHistIdx = -1;
@@ -24,38 +23,195 @@ let dragDeviceType = null;
 const svg = document.getElementById('network-canvas');
 
 const DEVICE_META = {
-  router:       { label:'Roteador',  icon:'🔷', color:'#00a0d1', shape:'diamond', interfaces:['Fa0/0','Fa0/1','Se0/0','Se0/1'] },
-  router3layer: { label:'Roteador L3',icon:'🔹',color:'#0080b0', shape:'diamond', interfaces:['Gi0/0','Gi0/1','Gi0/2','Gi0/3'] },
-  switch:       { label:'Switch',    icon:'🔲', color:'#00c896', shape:'rect',    interfaces:['Fa0/1','Fa0/2','Fa0/3','Fa0/4','Fa0/5','Fa0/6','Fa0/7','Fa0/8'] },
-  switch3layer: { label:'Switch L3', icon:'◼',  color:'#009070', shape:'rect',    interfaces:['Gi0/1','Gi0/2','Gi0/3','Gi0/4','Gi0/5','Gi0/6'] },
-  pc:           { label:'PC',        icon:'🖥️', color:'#9aa0aa', shape:'rect',    interfaces:['Fa0'] },
-  laptop:       { label:'Notebook',  icon:'💻', color:'#9aa0aa', shape:'rect',    interfaces:['Wireless0','Fa0'] },
-  server:       { label:'Servidor',  icon:'🖨️', color:'#c090d0', shape:'rect',    interfaces:['Fa0','Fa1'] },
-  printer:      { label:'Impressora',icon:'🖨',  color:'#a0a0a0', shape:'rect',    interfaces:['Fa0'] },
-  ap:           { label:'Access Pt', icon:'📡', color:'#f0a500', shape:'circle',  interfaces:['Fa0','Wireless0','Wireless1'] },
-  smartphone:   { label:'Smartphone',icon:'📱', color:'#e06080', shape:'circle',  interfaces:['Wireless0'] },
-  cloud:        { label:'Cloud',     icon:'☁️', color:'#5080b0', shape:'cloud',   interfaces:['Se0','Se1','Fa0','Fa1'] },
-  internet:     { label:'Internet',  icon:'🌐', color:'#4070a0', shape:'cloud',   interfaces:['Fa0','Fa1','Se0'] },
-  modem:        { label:'Modem',     icon:'📟', color:'#80a080', shape:'rect',    interfaces:['DSL0','Fa0'] },
-  firewall:     { label:'Firewall',  icon:'🛡️', color:'#e05050', shape:'rect',    interfaces:['Fa0/0 (WAN)','Fa0/1 (LAN)','Fa0/2 (DMZ)'] },
-  camera:       { label:'Câmera IP', icon:'📷', color:'#708090', shape:'circle',  interfaces:['Fa0'] },
-  sensor:       { label:'Sensor',    icon:'🌡️', color:'#80b080', shape:'circle',  interfaces:['Wireless0'] },
+  // Roteadores
+  router:        { label:'Roteador 1941', icon:'🔷', color:'#00a0d1', shape:'diamond', interfaces:['Gi0/0','Gi0/1','Se0/0/0','Se0/0/1'] },
+  router2901:    { label:'Roteador 2901', icon:'🔷', color:'#00a0d1', shape:'diamond', interfaces:['Gi0/0','Gi0/1','Gi0/2','Se0/0/0','Se0/0/1'] },
+  router2911:    { label:'Roteador 2911', icon:'🔷', color:'#00a0d1', shape:'diamond', interfaces:['Gi0/0','Gi0/1','Gi0/2','Se0/0/0','Se0/0/1'] },
+  router4321:    { label:'Roteador 4321', icon:'🔷', color:'#00a0d1', shape:'diamond', interfaces:['Gi0/0/0','Gi0/0/1','Se0/1/0','Se0/1/1'] },
+  router4331:    { label:'Roteador 4331', icon:'🔷', color:'#00a0d1', shape:'diamond', interfaces:['Gi0/0/0','Gi0/0/1','Gi0/0/2','Se0/1/0','Se0/1/1'] },
+  router3layer:  { label:'Roteador L3', icon:'🔹', color:'#0080b0', shape:'diamond', interfaces:['Gi0/0','Gi0/1','Gi0/2','Gi0/3'] },
+
+  // Switches
+  switch:        { label:'Switch 2960', icon:'🔲', color:'#00c896', shape:'rect', interfaces:['Fa0/1','Fa0/2','Fa0/3','Fa0/4','Fa0/5','Fa0/6','Fa0/7','Fa0/8','Gi0/1','Gi0/2'] },
+  switch2950:    { label:'Switch 2950', icon:'🔲', color:'#00c896', shape:'rect', interfaces:['Fa0/1','Fa0/2','Fa0/3','Fa0/4','Fa0/5','Fa0/6','Fa0/7','Fa0/8'] },
+  switch3560:    { label:'Switch 3560', icon:'◼',  color:'#009070', shape:'rect', interfaces:['Fa0/1','Fa0/2','Fa0/3','Fa0/4','Fa0/5','Fa0/6','Fa0/7','Fa0/8','Gi0/1','Gi0/2'] },
+  switch3650:    { label:'Switch 3650', icon:'◼',  color:'#009070', shape:'rect', interfaces:['Gi1/0/1','Gi1/0/2','Gi1/0/3','Gi1/0/4','Gi1/0/5','Gi1/0/6','Gi1/0/7','Gi1/0/8'] },
+  switch3layer:  { label:'Switch L3', icon:'◼',  color:'#009070', shape:'rect', interfaces:['Gi0/1','Gi0/2','Gi0/3','Gi0/4','Gi0/5','Gi0/6'] },
+  bridge:        { label:'Bridge', icon:'🌉', color:'#00b080', shape:'rect', interfaces:['Fa0/1','Fa0/2'] },
+  hub:           { label:'Hub', icon:'🔘', color:'#7aa0a0', shape:'rect', interfaces:['Fa0/1','Fa0/2','Fa0/3','Fa0/4','Fa0/5','Fa0/6'] },
+
+  // Dispositivos finais
+  pc:            { label:'PC', icon:'🖥️', color:'#9aa0aa', shape:'rect', interfaces:['Fa0'] },
+  laptop:        { label:'Notebook', icon:'💻', color:'#9aa0aa', shape:'rect', interfaces:['Wireless0','Fa0'] },
+  tablet:        { label:'Tablet', icon:'📱', color:'#8fa0d0', shape:'circle', interfaces:['Wireless0'] },
+  smartphone:    { label:'Smartphone', icon:'📱', color:'#e06080', shape:'circle', interfaces:['Wireless0'] },
+  server:        { label:'Servidor', icon:'🗄️', color:'#c090d0', shape:'rect', interfaces:['Fa0','Fa1'] },
+  printer:       { label:'Impressora', icon:'🖨', color:'#a0a0a0', shape:'rect', interfaces:['Fa0','Wireless0'] },
+  ipphone:       { label:'Telefone IP', icon:'☎️', color:'#b0a070', shape:'rect', interfaces:['Fa0','PC'] },
+  tv:            { label:'TV', icon:'📺', color:'#7777aa', shape:'rect', interfaces:['Fa0','Wireless0'] },
+
+  // Wireless
+  ap:            { label:'Access Point', icon:'📡', color:'#f0a500', shape:'circle', interfaces:['Fa0','Wireless0','Wireless1'] },
+  wap:           { label:'AP Wireless', icon:'📶', color:'#f0a500', shape:'circle', interfaces:['Fa0','Wireless0'] },
+  wirelessRouter:{ label:'Roteador Wi‑Fi', icon:'📶', color:'#e0a000', shape:'rect', interfaces:['Internet','Fa0/1','Fa0/2','Fa0/3','Fa0/4','Wireless0'] },
+  wlc:           { label:'Controladora WLC', icon:'📡', color:'#d09000', shape:'rect', interfaces:['Gi0','Gi1','Management'] },
+
+  // WAN / Segurança
+  cloud:         { label:'Cloud', icon:'☁️', color:'#5080b0', shape:'cloud', interfaces:['Se0','Se1','Fa0','Fa1'] },
+  internet:      { label:'Internet', icon:'🌐', color:'#4070a0', shape:'cloud', interfaces:['Fa0','Fa1','Se0'] },
+  modem:         { label:'Modem DSL/Cable', icon:'📟', color:'#80a080', shape:'rect', interfaces:['DSL0','Cable0','Fa0'] },
+  firewall:      { label:'Firewall ASA', icon:'🛡️', color:'#e05050', shape:'rect', interfaces:['Gi0/0 (outside)','Gi0/1 (inside)','Gi0/2 (dmz)'] },
+  asa:           { label:'ASA 5505', icon:'🛡️', color:'#e05050', shape:'rect', interfaces:['Eth0/0','Eth0/1','Eth0/2','Eth0/3','Eth0/4','Eth0/5'] },
+
+  // IoT / Smart Home
+  homeGateway:   { label:'Home Gateway', icon:'🏠', color:'#80b080', shape:'rect', interfaces:['Internet','LAN1','LAN2','Wireless0'] },
+  camera:        { label:'Câmera IP', icon:'📷', color:'#708090', shape:'circle', interfaces:['Fa0','Wireless0'] },
+  webcam:        { label:'Webcam', icon:'🎥', color:'#708090', shape:'circle', interfaces:['Wireless0'] },
+  sensor:        { label:'Sensor', icon:'🌡️', color:'#80b080', shape:'circle', interfaces:['Wireless0'] },
+  smokeDetector: { label:'Detector Fumaça', icon:'🚨', color:'#d08040', shape:'circle', interfaces:['Wireless0'] },
+  motionSensor:  { label:'Sensor Movimento', icon:'👁️', color:'#80b080', shape:'circle', interfaces:['Wireless0'] },
+  smartLight:    { label:'Lâmpada Smart', icon:'💡', color:'#f5d020', shape:'circle', interfaces:['Wireless0'] },
+  fan:           { label:'Ventilador', icon:'🌀', color:'#70a0c0', shape:'circle', interfaces:['Wireless0'] },
+  door:          { label:'Porta Smart', icon:'🚪', color:'#b08050', shape:'rect', interfaces:['Wireless0'] },
+  siren:         { label:'Sirene', icon:'🔊', color:'#e06060', shape:'circle', interfaces:['Wireless0'] },
+  thermostat:    { label:'Termostato', icon:'🌡️', color:'#80b080', shape:'rect', interfaces:['Wireless0'] },
+  mcu:           { label:'MCU', icon:'🔧', color:'#9090d0', shape:'rect', interfaces:['D0','D1','D2','A0','A1','Wireless0'] },
+  sbc:           { label:'SBC', icon:'🧩', color:'#9090d0', shape:'rect', interfaces:['Eth0','USB0','GPIO0','GPIO1','Wireless0'] },
+
+  // Industrial / energia
+  plc:           { label:'PLC', icon:'🏭', color:'#a08060', shape:'rect', interfaces:['Eth0','Serial0','I/O0','I/O1'] },
+  actuator:      { label:'Atuador', icon:'⚙️', color:'#909090', shape:'circle', interfaces:['Wireless0','I/O0'] },
+  meter:         { label:'Medidor Energia', icon:'⚡', color:'#e0c050', shape:'rect', interfaces:['Fa0','Wireless0'] }
 };
 
+Object.keys(DEVICE_META).forEach(k => { if (nodeCounter[k] === undefined) nodeCounter[k] = 0; });
+
+const DEVICE_PREFIX = {
+  router:'R', router2901:'R2901', router2911:'R2911', router4321:'R4321', router4331:'R4331', router3layer:'RL3',
+  switch:'SW2960', switch2950:'SW2950', switch3560:'SW3560', switch3650:'SW3650', switch3layer:'SWL3', bridge:'BR', hub:'HUB',
+  pc:'PC', laptop:'NB', tablet:'TAB', smartphone:'PHONE', server:'SRV', printer:'PRT', ipphone:'IPPHONE', tv:'TV',
+  ap:'AP', wap:'WAP', wirelessRouter:'WIFI', wlc:'WLC', cloud:'CLOUD', internet:'NET', modem:'MODEM', firewall:'FW', asa:'ASA',
+  homeGateway:'HOME', camera:'CAM', webcam:'WEBCAM', sensor:'SENS', smokeDetector:'SMOKE', motionSensor:'MOTION', smartLight:'LIGHT', fan:'FAN', door:'DOOR', siren:'SIREN', thermostat:'THERMO', mcu:'MCU', sbc:'SBC',
+  plc:'PLC', actuator:'ACT', meter:'METER'
+};
+
+
+// ══════════════════════════════════════════
+//  CAMADA 2/3 BÁSICA: MAC, ARP, ICMP, DHCP, DNS
+// ══════════════════════════════════════════
+function makeMac(seed = '') {
+  let h = 0;
+  String(seed || (Date.now()+Math.random())).split('').forEach(ch => { h = ((h << 5) - h + ch.charCodeAt(0)) >>> 0; });
+  const bytes = [0x02, (h>>24)&255, (h>>16)&255, (h>>8)&255, h&255, Math.floor(Math.random()*255)];
+  return bytes.map(b => b.toString(16).padStart(2,'0')).join(':').toUpperCase();
+}
+
+function arpLearn(a, b) {
+  if (!a || !b || !a.ip || !b.ip) return;
+  a.arp = a.arp || [];
+  const old = a.arp.find(x => x.ip === b.ip);
+  if (old) { old.mac = b.mac; old.age = 0; return; }
+  a.arp.push({ ip: b.ip, mac: b.mac || makeMac(b.id), age: 0 });
+}
+
+function learnMacAlongPath(path) {
+  if (!path || path.length < 2) return;
+  for (let i = 1; i < path.length - 1; i++) {
+    const sw = path[i];
+    if (!isSwitchNode(sw)) continue;
+    sw.macTable = sw.macTable || [];
+    const prev = path[i-1], next = path[i+1];
+    const lkPrev = getLinkBetween(prev.id, sw.id);
+    const lkNext = getLinkBetween(sw.id, next.id);
+    const inPort = lkPrev ? ifaceNameOnNode(lkPrev, sw.id) : '?';
+    const outPort = lkNext ? ifaceNameOnNode(lkNext, sw.id) : '?';
+    const vlanIn = lkPrev ? (vlanAtSwitchPort(sw, prev.id, lkPrev) || 1) : 1;
+    const vlanOut = lkNext ? (vlanAtSwitchPort(sw, next.id, lkNext) || 1) : 1;
+    upsertMac(sw, prev.mac, inPort, vlanIn, 'DYNAMIC');
+    upsertMac(sw, next.mac, outPort, vlanOut, 'DYNAMIC');
+  }
+}
+
+function upsertMac(sw, mac, port, vlan = 1, type = 'DYNAMIC') {
+  if (!sw || !mac) return;
+  sw.macTable = sw.macTable || [];
+  const hit = sw.macTable.find(x => x.mac === mac && x.vlan === vlan);
+  if (hit) { hit.port = port; hit.age = 0; hit.type = type; return; }
+  sw.macTable.push({ vlan, mac, type, port, age: 0 });
+}
+
+function findReachableService(src, serviceName) {
+  return nodes.find(nd => nd.active !== false && nd.services && nd.services[serviceName] && nd.id !== src.id && isReachable(src, nd));
+}
+
+function nextDhcpIp(server) {
+  server.dhcpPool = server.dhcpPool || { network:'192.168.1.0', mask:'255.255.255.0', gateway:server.ip || '192.168.1.1', dns:server.ip || '192.168.1.10', start:100, end:199, leases:{} };
+  const pool = server.dhcpPool;
+  pool.leases = pool.leases || {};
+  const prefix = pool.network.split('.').slice(0,3).join('.');
+  for (let i = Number(pool.start)||100; i <= (Number(pool.end)||199); i++) {
+    const ip = `${prefix}.${i}`;
+    if (!Object.values(pool.leases).includes(ip) && !nodes.some(n => n.ip === ip)) return ip;
+  }
+  return null;
+}
+
+function requestDhcp(client) {
+  const server = findReachableService(client, 'dhcp');
+  if (!server) { cliLog('err','DHCP falhou: nenhum servidor DHCP ativo e alcançável.'); return; }
+  const ip = nextDhcpIp(server);
+  if (!ip) { cliLog('err','DHCP falhou: pool sem endereços livres.'); return; }
+  server.dhcpPool.leases[client.mac] = ip;
+  applyIpToNode(client, ip, server.dhcpPool.mask || '255.255.255.0', { silent:true });
+  client.gateway = server.dhcpPool.gateway || server.ip || '';
+  client.dns = server.dhcpPool.dns || server.ip || '';
+  arpLearn(client, server); arpLearn(server, client);
+  learnMacAlongPath(findPath(client, server));
+  cliLog('ok',`DHCP ACK: ${client.name} recebeu ${ip}/${maskToPrefix(client.mask)} gateway ${client.gateway || '-'} DNS ${client.dns || '-'}`);
+}
+
+function resolveNameForNode(client, name) {
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return name;
+  const server = findReachableService(client, 'dns');
+  if (!server) return null;
+  server.dnsRecords = server.dnsRecords || { 'server.local': server.ip || '192.168.1.10', 'www.local': server.ip || '192.168.1.10' };
+  return server.dnsRecords[name.toLowerCase()] || null;
+}
+
+function showDhcpBindings(n) {
+  if (!n.services?.dhcp || !n.dhcpPool) { cliLog('warn','Este dispositivo não possui DHCP ativo.'); return; }
+  cliLog('ok','IP address        Client-ID/MAC            Type');
+  Object.entries(n.dhcpPool.leases || {}).forEach(([mac, ip]) => cliLog('ok',`${ip.padEnd(17)} ${mac.padEnd(24)} automatic`));
+}
+
+function showDnsRecords(n) {
+  if (!n.services?.dns) { cliLog('warn','Este dispositivo não possui DNS ativo.'); return; }
+  n.dnsRecords = n.dnsRecords || { 'server.local': n.ip || '192.168.1.10', 'www.local': n.ip || '192.168.1.10' };
+  cliLog('ok','Name                         Address');
+  Object.entries(n.dnsRecords).forEach(([name, ip]) => cliLog('ok',`${name.padEnd(28)} ${ip}`));
+}
+
 function isSwitchNode(n) {
-  return n && (n.type === 'switch' || n.type === 'switch3layer');
+  return n && ['switch','switch2950','switch3560','switch3650','switch3layer','bridge'].includes(n.type);
 }
 
 function ensureNodeDefaults(n) {
   if (!n || n.type === 'note') return;
+  if (!n.mac) n.mac = makeMac(n.id || n.name || n.type);
+  if (!n.arp) n.arp = [];
+  if (isSwitchNode(n) && !n.macTable) n.macTable = [];
   if (!n.cli) n.cli = { mode: 'user', iface: null };
   if (!['user', 'privileged', 'config', 'interface'].includes(n.cli.mode)) n.cli.mode = 'user';
   if (isSwitchNode(n)) {
     if (!n.vlans || typeof n.vlans !== 'object') n.vlans = { 1: { name: 'default' } };
     if (!n.vlans[1]) n.vlans[1] = { name: 'default' };
   }
-  if (['server','pc','laptop'].includes(n.type) && !n.services) {
+  if (['server','pc','laptop','tablet','smartphone','printer','ipphone','tv'].includes(n.type) && !n.services) {
     n.services = { http:false, dns:false, dhcp:false };
+    if (n.type === 'server') {
+      n.dnsRecords = n.dnsRecords || { 'server.local': n.ip || '', 'www.local': n.ip || '' };
+      n.dhcpPool = n.dhcpPool || { network:'192.168.1.0', mask:'255.255.255.0', gateway:'192.168.1.1', dns:n.ip || '', start:100, end:199, leases:{} };
+    }
   }
   (n.interfaces || []).forEach(iface => {
     if (iface.adminDown === undefined) iface.adminDown = false;
@@ -402,7 +558,7 @@ function renderNode(n, m, selClass) {
 function addNode(type, x, y) {
   const m = DEVICE_META[type];
   nodeCounter[type] = (nodeCounter[type]||0) + 1;
-  const prefix = type.replace('3layer','').replace('router','R').replace('switch','SW').replace('pc','PC').replace('laptop','NB').replace('server','SRV').replace('printer','PRT').replace('ap','AP').replace('smartphone','PHONE').replace('cloud','CLOUD').replace('internet','NET').replace('modem','MODEM').replace('firewall','FW').replace('camera','CAM').replace('sensor','SENS');
+  const prefix = DEVICE_PREFIX[type] || type.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'DEV';
   const id = 'n' + Date.now() + Math.random().toString(36).substr(2,4);
   const n = {
     id, type, x, y,
@@ -415,8 +571,12 @@ function addNode(type, x, y) {
     routing: [],
     arp: []
   };
-  if (['server','pc','laptop'].includes(type)) {
+  if (['server','pc','laptop','tablet','smartphone','printer','ipphone','tv'].includes(type)) {
     n.services = { http:false, dns:false, dhcp:false };
+    if (n.type === 'server') {
+      n.dnsRecords = n.dnsRecords || { 'server.local': n.ip || '', 'www.local': n.ip || '' };
+      n.dhcpPool = n.dhcpPool || { network:'192.168.1.0', mask:'255.255.255.0', gateway:'192.168.1.1', dns:n.ip || '', start:100, end:199, leases:{} };
+    }
   }
   pushUndo();
   nodes.push(n);
@@ -429,7 +589,13 @@ function addNode(type, x, y) {
 
 function autoIP(type, n) {
   if (['cloud','internet','modem'].includes(type)) return '';
-  const base = { router:'10.0', router3layer:'10.1', switch:'', switch3layer:'', pc:'192.168.1', laptop:'192.168.1', server:'192.168.2', printer:'192.168.3', ap:'192.168.0', smartphone:'192.168.1', firewall:'172.16.0', camera:'192.168.10', sensor:'192.168.20' };
+  const base = {
+    router:'10.0', router2901:'10.0', router2911:'10.0', router4321:'10.0', router4331:'10.0', router3layer:'10.1',
+    switch:'', switch2950:'', switch3560:'', switch3650:'', switch3layer:'', bridge:'', hub:'',
+    pc:'192.168.1', laptop:'192.168.1', tablet:'192.168.1', smartphone:'192.168.1', server:'192.168.2', printer:'192.168.3', ipphone:'192.168.4', tv:'192.168.5',
+    ap:'192.168.0', wap:'192.168.0', wirelessRouter:'192.168.0', wlc:'192.168.0', firewall:'172.16.0', asa:'172.16.0',
+    homeGateway:'192.168.0', camera:'192.168.10', webcam:'192.168.10', sensor:'192.168.20', smokeDetector:'192.168.20', motionSensor:'192.168.20', smartLight:'192.168.20', fan:'192.168.20', door:'192.168.20', siren:'192.168.20', thermostat:'192.168.20', mcu:'192.168.30', sbc:'192.168.30', plc:'10.10.0', actuator:'10.10.1', meter:'10.10.2'
+  };
   const b = base[type];
   if (!b) return '';
   return `${b}.${n}`;
@@ -513,9 +679,9 @@ function addLink(srcId, dstId, opts = {}) {
 
 function getLinkType(src, dst) {
   const a = getNode(src), b = getNode(dst);
-  const wireless = ['ap','smartphone'];
+  const wireless = ['ap','wap','wirelessRouter','homeGateway','smartphone','tablet','laptop','printer','camera','webcam','sensor','smokeDetector','motionSensor','smartLight','fan','door','siren','thermostat','mcu','sbc','meter'];
   if (wireless.includes(a?.type) || wireless.includes(b?.type)) return 'wireless';
-  const serial = ['router','router3layer','modem','cloud','internet'];
+  const serial = ['router','router2901','router2911','router4321','router4331','router3layer','modem','cloud','internet'];
   if (serial.includes(a?.type) && serial.includes(b?.type)) return 'serial';
   return 'ethernet';
 }
@@ -880,7 +1046,7 @@ function cliKeyDown(e) {
   }
 }
 
-const CLI_COMMANDS = ['help','ping','traceroute','show ip','show arp','show version','show interfaces','show vlan brief','show mac address-table','show spanning-tree','show netsim-parity','show running-config','enable','disable','configure terminal','interface','vlan','hostname','ip address','ip route','no ip route','shutdown','no shutdown','switchport mode access','switchport mode trunk','switchport access vlan','description','clear','exit','end','write memory','copy running-config startup-config','do '];
+const CLI_COMMANDS = ['help','ping','traceroute','show ip','show arp','show version','show interfaces','show vlan brief','show mac address-table','show dhcp binding','show dns','ipconfig /dhcp','dhcp','nslookup','dns record','show spanning-tree','show netsim-parity','show running-config','enable','disable','configure terminal','interface','vlan','hostname','ip address','ip route','no ip route','shutdown','no shutdown','switchport mode access','switchport mode trunk','switchport access vlan','description','clear','exit','end','write memory','copy running-config startup-config','do '];
 
 function autocomplete(input) {
   const val = input.value.toLowerCase();
@@ -891,8 +1057,8 @@ function autocomplete(input) {
 function showPtRoadmap() {
   cliLog('info','══ NetSim vs Cisco Packet Tracer ══');
   cliLog('warn','Este projeto não pode reproduzir “todas” as funções do Packet Tracer — o PT é um simulador proprietário completo.');
-  cliLog('','<b>Já há neste NetSim (parcial)</b>: topologia; links por porta física; IOS-lite (<b>enable</b>, <b>conf t</b>, <b>interface</b>); VLAN access em switches; verificação de VLAN no caminho do ping/traceroute; <b>shutdown</b> por interface.');
-  cliLog('','<b>Não disponível aqui</b> (exemplos): PDU modo simulação camada-a-camada; MAC learning / STP / EtherChannel; OSPF/EIGRP/BGP; WLAN avançado; DHCP/DNS/HTTP servidor como no PT; NAT/stateful firewall; modo físico e cabos; multiusuário.');
+  cliLog('','<b>Já há neste NetSim (parcial)</b>: topologia; links por porta física; IOS-lite (<b>enable</b>, <b>conf t</b>, <b>interface</b>); VLAN access em switches; ARP; ICMP/ping; DHCP básico; DNS básico; tabela MAC dinâmica; verificação de VLAN no caminho do ping/traceroute; <b>shutdown</b> por interface.');
+  cliLog('','<b>Não disponível aqui</b> (exemplos): PDU modo simulação camada-a-camada avançado; STP / EtherChannel; OSPF/EIGRP/BGP; WLAN avançado; HTTP completo como no PT; NAT/stateful firewall; modo físico e cabos; multiusuário.');
   cliLog('info','Para estudos formais use o <b>Cisco Packet Tracer</b> oficial junto com este protótipo.');
 }
 
@@ -926,6 +1092,8 @@ function processCommand(cmd, n, execOverride = false) {
     cliLog('','');
     cliLog('info','Comandos principais:');
     cliLog('','  <b>ping / traceroute</b> — ICMP (EXEC)');
+    cliLog('','  <b>ipconfig /dhcp</b> ou <b>dhcp</b> — solicita IP ao servidor DHCP');
+    cliLog('','  <b>nslookup nome</b> — consulta DNS');
     cliLog('','  <b>show ip | arp | interfaces | vlan brief | running-config</b>');
     cliLog('','  <b>show netsim-parity</b> — Limitações vs Packet Tracer');
     cliLog('','  Switch: <b>vlan ID</b>, <b>switchport access vlan</b>, <b>switchport mode trunk</b>');
@@ -984,6 +1152,19 @@ function processCommand(cmd, n, execOverride = false) {
   if (lc.startsWith('traceroute ')) {
     if (!pingTracerouteOk()) return;
     runTraceroute(n, raw.split(/\s+/)[1]);
+    return;
+  }
+
+  if ((lc === 'ipconfig /dhcp' || lc === 'dhcp' || lc === 'renew dhcp') && pingTracerouteOk()) {
+    requestDhcp(n);
+    return;
+  }
+  if ((lc.startsWith('nslookup ') || lc.startsWith('dns lookup ')) && pingTracerouteOk()) {
+    const name = raw.split(/\s+/).slice(lc.startsWith('dns lookup ') ? 2 : 1).join(' ').trim().toLowerCase();
+    if (!name) { cliLog('err','Uso: nslookup [nome]'); return; }
+    const ip = resolveNameForNode(n, name);
+    if (ip) cliLog('ok',`Servidor DNS respondeu: ${name} = ${ip}`);
+    else cliLog('err',`DNS falhou: nome não encontrado ou servidor DNS inalcançável (${name}).`);
     return;
   }
 
@@ -1108,6 +1289,26 @@ function processCommand(cmd, n, execOverride = false) {
     return;
   }
 
+
+  const dnsRec = raw.match(/^dns\s+record\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)$/i);
+  if (dnsRec && st.mode === 'config') {
+    n.services = n.services || { http:false, dns:false, dhcp:false };
+    n.services.dns = true;
+    n.dnsRecords = n.dnsRecords || {};
+    n.dnsRecords[dnsRec[1].toLowerCase()] = dnsRec[2];
+    cliLog('ok',`DNS: ${dnsRec[1].toLowerCase()} → ${dnsRec[2]}`);
+    return;
+  }
+
+  const dhcpPool = raw.match(/^dhcp\s+pool\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\d+)$/i);
+  if (dhcpPool && st.mode === 'config') {
+    n.services = n.services || { http:false, dns:false, dhcp:false };
+    n.services.dhcp = true;
+    n.dhcpPool = { network:dhcpPool[1], mask:dhcpPool[2], gateway:dhcpPool[3], dns:dhcpPool[4], start:Number(dhcpPool[5]), end:Number(dhcpPool[6]), leases:{} };
+    cliLog('ok',`DHCP pool ativo: ${dhcpPool[1]}/${maskToPrefix(dhcpPool[2])} .${dhcpPool[5]}-.${dhcpPool[6]}`);
+    return;
+  }
+
   if (lc === 'show ip interface brief' && canShow) {
     cliLog('ok','Interface              IP-Address      OK? Method Status');
     (n.interfaces || []).forEach(iface => {
@@ -1136,9 +1337,15 @@ function processCommand(cmd, n, execOverride = false) {
   }
 
   if (lc === 'show mac address-table' && canShow && isSwitchNode(n)) {
-    cliLog('warn','Stub: aprendizado MAC / bridging não são simulados (use Packet Tracer para CAM real).');
+    n.macTable = n.macTable || [];
+    if (!n.macTable.length) { cliLog('warn','Tabela MAC vazia. Execute ping/DHCP entre hosts passando por este switch.'); return; }
+    cliLog('ok','          Mac Address Table');
+    cliLog('','Vlan    Mac Address       Type        Ports');
+    n.macTable.forEach(e => cliLog('ok',`${String(e.vlan).padEnd(7)} ${String(e.mac).padEnd(17)} ${String(e.type||'DYNAMIC').padEnd(11)} ${e.port}`));
     return;
   }
+  if (lc === 'show dhcp binding' && canShow) { showDhcpBindings(n); return; }
+  if (lc === 'show dns' && canShow) { showDnsRecords(n); return; }
 
   if ((lc === 'show spanning-tree' || lc === 'show span') && canShow) {
     cliLog('warn','STP não implementado neste NetSim.');
@@ -1189,6 +1396,8 @@ function processCommand(cmd, n, execOverride = false) {
     }
     if (n.ip && !isSwitchNode(n)) cliLog('','ip address '+n.ip+' '+(n.mask||'255.255.255.0'));
     if (n.gateway) cliLog('','ip default-gateway '+n.gateway);
+    if (n.services?.dns && n.dnsRecords) Object.entries(n.dnsRecords).forEach(([name, ip]) => cliLog('', 'dns record '+name+' '+ip));
+    if (n.services?.dhcp && n.dhcpPool) cliLog('', `dhcp pool ${n.dhcpPool.network} ${n.dhcpPool.mask} ${n.dhcpPool.gateway} ${n.dhcpPool.dns} ${n.dhcpPool.start} ${n.dhcpPool.end}`);
     (n.routing||[]).forEach(r => cliLog('','ip route '+r.network+' '+r.mask+' '+r.nexthop));
     cliLog('','end');
     return;
@@ -1294,7 +1503,16 @@ function maskToPrefix(mask) {
 //  PING / TRACEROUTE
 // ══════════════════════════════════════════
 function runPing(n, dst) {
-  if (!dst) { cliLog('err','Uso: ping [ip]'); return; }
+  if (!dst) { cliLog('err','Uso: ping [ip ou nome DNS]'); return; }
+  const originalDst = dst;
+  const resolved = resolveNameForNode(n, dst);
+  if (resolved) {
+    cliLog('info',`DNS: ${originalDst} resolvido para ${resolved}`);
+    dst = resolved;
+  } else if (!/^\d+\.\d+\.\d+\.\d+$/.test(dst)) {
+    cliLog('err',`DNS falhou: não foi possível resolver ${originalDst}.`);
+    return;
+  }
   // Check if source has conflict
   if (n.ipConflict) {
     cliLog('warn',`%IP-4-DUPADDR: ${n.name} possui conflito de IP (${n.ip}). Ping indisponível.`);
@@ -1317,6 +1535,11 @@ function runPing(n, dst) {
   }
   cliLog('info',`Pingando ${dst} a partir de ${n.name}...`);
   const reachable = target && isReachable(n, target);
+  if (reachable && target) {
+    arpLearn(n, target); arpLearn(target, n);
+    learnMacAlongPath(findPath(n, target));
+    showProperties(n);
+  }
   if (simMode && target && reachable) {
     simPduQueue.push({ kind:'ICMP Echo', src:n.name, dst:target.name, dstIp:dst });
     cliLog('info','[SIM] PDU ICMP enfileirado — menu Simulação → Próximo Passo.');
@@ -1639,7 +1862,7 @@ function refreshDeskPhysical(n) {
 function refreshDeskServices(n) {
   const el = document.getElementById('desk-panel-services');
   if (!el) return;
-  if (!['server','pc','laptop'].includes(n.type)) {
+  if (!['server','pc','laptop','tablet','smartphone','printer','ipphone','tv'].includes(n.type)) {
     el.innerHTML = `<p class="desk-muted">Sem serviços neste tipo de equipamento.</p>`;
     return;
   }
@@ -1668,7 +1891,7 @@ function openDeviceDesk(id) {
   document.getElementById('desk-device-title').textContent = n.name;
   document.getElementById('desk-device-sub').textContent = `${m.label} · ${n.type}`;
 
-  const showRt = ['router','router3layer','switch3layer'].includes(n.type);
+  const showRt = ['router','router2901','router2911','router4321','router4331','router3layer','switch3560','switch3650','switch3layer','firewall','asa'].includes(n.type);
   document.getElementById('desk-tab-routes').classList.toggle('desk-tab-hide', !showRt);
 
   const showSvc = ['server','pc','laptop'].includes(n.type);
@@ -2242,3 +2465,254 @@ function globalKeyDown(e) {
 }
 
 window.addEventListener('resize', render);
+// ══════════════════════════════════════════
+//  NETSIM PRO v4 — ENGINE AVANÇADA EDUCACIONAL
+//  Packet engine, ARP completo, ICMP roteado, VLAN trunk,
+//  routing estático/OSPF simplificado e modo simulação visual.
+// ══════════════════════════════════════════
+(function(){
+  const ADV_VERSION = 'v4 Packet Engine';
+  const oldProcessCommand = processCommand;
+  const oldShowPtRoadmap = showPtRoadmap;
+
+  function ipToInt(ip){ return String(ip||'').split('.').reduce((a,b)=>(a<<8)+(parseInt(b,10)||0),0)>>>0; }
+  function intToIp(n){ return [24,16,8,0].map(s => (n>>>s)&255).join('.'); }
+  function netOf(ip, mask){ return intToIp(ipToInt(ip) & ipToInt(mask||'255.255.255.0')); }
+  function sameSubnet(a,b,mask){ return !!a && !!b && netOf(a,mask||'255.255.255.0') === netOf(b,mask||'255.255.255.0'); }
+  function isRouterLike(n){ return n && ['router','router2901','router2911','router4321','router4331','router3layer','switch3560','switch3650','switch3layer','firewall','asa'].includes(n.type); }
+  function connectedNetworks(n){
+    const nets = [];
+    if (n.ip && n.mask) nets.push({ network:netOf(n.ip,n.mask), mask:n.mask, prefix:maskToPrefix(n.mask), source:'C', via:'connected', iface:'host' });
+    (n.interfaces||[]).forEach(iface=>{
+      if (iface.ip) nets.push({ network:netOf(iface.ip, iface.mask||'255.255.255.0'), mask:iface.mask||'255.255.255.0', prefix:maskToPrefix(iface.mask||'255.255.255.0'), source:'C', via:'connected', iface:iface.name });
+    });
+    return nets;
+  }
+  function routeMatchesIp(route, ip){ return netOf(ip, route.mask||prefixToMask(route.prefix||24)) === route.network; }
+  function prefixToMask(prefix){ let n = prefix===0 ? 0 : (0xffffffff << (32-prefix))>>>0; return intToIp(n); }
+  function bestRoute(n, dstIp){
+    const routes = [...connectedNetworks(n), ...(n.routing||[])];
+    let best = null;
+    routes.forEach(r=>{
+      const rr = { ...r, mask:r.mask || prefixToMask(r.prefix||24), prefix:r.prefix || maskToPrefix(r.mask || '255.255.255.0') };
+      if (routeMatchesIp(rr, dstIp) && (!best || rr.prefix > best.prefix)) best = rr;
+    });
+    return best;
+  }
+  function hostGatewayNode(host){
+    if (!host.gateway) return null;
+    return nodes.find(n => n.active !== false && (n.ip === host.gateway || (n.interfaces||[]).some(i=>i.ip===host.gateway)));
+  }
+  function l2Path(a,b){ const p = findPath(a,b); return (p.length && pathVlanOk(p)) ? p : []; }
+  function findRoutedPath(src, dst){
+    if (!src || !dst) return [];
+    if (sameSubnet(src.ip, dst.ip, src.mask) || !src.gateway) return l2Path(src,dst);
+    const gw = hostGatewayNode(src);
+    if (!gw) return [];
+    const first = l2Path(src, gw);
+    if (!first.length) return [];
+    if (sameSubnet(gw.ip, dst.ip, gw.mask) || connectedNetworks(gw).some(r=>routeMatchesIp(r,dst.ip))) {
+      const last = l2Path(gw, dst);
+      if (!last.length) return [];
+      return first.concat(last.slice(1));
+    }
+    // Busca por roteadores que tenham rota até o destino. É uma aproximação educacional.
+    const routerQueue = [[gw]];
+    const seen = new Set();
+    while (routerQueue.length) {
+      const rpath = routerQueue.shift();
+      const cur = rpath[rpath.length-1];
+      if (seen.has(cur.id)) continue; seen.add(cur.id);
+      if (bestRoute(cur, dst.ip)) {
+        const tail = l2Path(cur, dst);
+        if (tail.length) return first.concat(rpath.slice(1)).concat(tail.slice(1));
+      }
+      links.filter(l=> (l.src===cur.id||l.dst===cur.id) && linkOperational(l)).forEach(l=>{
+        const nb = getNode(l.src===cur.id?l.dst:l.src);
+        if (isRouterLike(nb) && !seen.has(nb.id)) routerQueue.push([...rpath, nb]);
+      });
+    }
+    return [];
+  }
+  function vlanForHop(sw, prev, lk){
+    const v = vlanAtSwitchPort(sw, prev.id, lk);
+    return v === null ? 'trunk' : v;
+  }
+  function learnMacReal(path){
+    if (!path || path.length < 2) return;
+    for (let i=1; i<path.length-1; i++) {
+      const sw = path[i];
+      if (!isSwitchNode(sw)) continue;
+      const prev = path[i-1], next = path[i+1];
+      const inLink = getLinkBetween(prev.id, sw.id);
+      const outLink = getLinkBetween(next.id, sw.id);
+      if (inLink) upsertMac(sw, prev.mac, ifaceNameOnNode(inLink, sw.id), vlanForHop(sw, prev, inLink)==='trunk'?1:vlanForHop(sw, prev, inLink), 'DYNAMIC');
+      if (outLink) upsertMac(sw, next.mac, ifaceNameOnNode(outLink, sw.id), vlanForHop(sw, next, outLink)==='trunk'?1:vlanForHop(sw, next, outLink), 'DYNAMIC');
+    }
+  }
+  function newPdu(proto, src, dst, path, info){
+    return { id:'pdu'+Date.now()+Math.random().toString(36).slice(2,5), proto, src:src.name, dst:dst.name, srcId:src.id, dstId:dst.id, path:(path||[]).map(n=>n.id), hop:0, info:info||{}, created:new Date().toLocaleTimeString() };
+  }
+  function enqueuePacket(proto, src, dst, path, info){
+    const pdu = newPdu(proto, src, dst, path, info);
+    simPduQueue.push(pdu);
+    cliLog('info', `[SIM] ${proto} enfileirado: ${src.name} → ${dst.name} (${(path||[]).map(n=>n.name).join(' → ')})`);
+    return pdu;
+  }
+  function enqueueArpExchange(src,dst,path){
+    enqueuePacket('ARP Request', src, dst, path, { op:'who-has', targetIp:dst.ip, broadcast:true, osi:'L2 broadcast' });
+    enqueuePacket('ARP Reply', dst, src, [...path].reverse(), { op:'is-at', targetIp:src.ip, mac:dst.mac, osi:'L2 unicast' });
+  }
+  function enqueueIcmpExchange(src,dst,path){
+    enqueuePacket('ICMP Echo Request', src, dst, path, { type:8, code:0, ttl:64, osi:'L3 IP + ICMP' });
+    enqueuePacket('ICMP Echo Reply', dst, src, [...path].reverse(), { type:0, code:0, ttl:64, osi:'L3 IP + ICMP' });
+  }
+
+  runPing = function(n, dst){
+    if (!dst) { cliLog('err','Uso: ping [ip ou nome DNS]'); return; }
+    const originalDst = dst;
+    const resolved = resolveNameForNode(n, dst);
+    if (resolved) { cliLog('info',`DNS: ${originalDst} resolvido para ${resolved}`); dst = resolved; }
+    else if (!/^\d+\.\d+\.\d+\.\d+$/.test(dst)) { cliLog('err',`DNS falhou: não foi possível resolver ${originalDst}.`); return; }
+    if (n.ipConflict) { cliLog('warn',`%IP-4-DUPADDR: ${n.name} possui conflito de IP (${n.ip}). Ping indisponível.`); return; }
+    const targets = nodes.filter(nd => nd.ip === dst && nd.active !== false && nd.id !== n.id);
+    if (targets.length !== 1) { cliLog('err', targets.length ? `%IP-4-DUPADDR: destino duplicado ${dst}` : `Destino ${dst} não encontrado.`); return; }
+    const target = targets[0];
+    const path = findRoutedPath(n, target);
+    const reachable = path.length > 0 && pathVlanOk(path);
+    cliLog('info',`Pingando ${dst} a partir de ${n.name}...`);
+    if (reachable) {
+      arpLearn(n,target); arpLearn(target,n); learnMacReal(path);
+      if (simMode) { enqueueArpExchange(n,target,path); enqueueIcmpExchange(n,target,path); }
+      showProperties(n);
+    }
+    for (let i=1;i<=4;i++) setTimeout(()=>{
+      if (reachable) {
+        const ms = Math.floor(Math.random()*18+1);
+        cliLog('ok',`Resposta de ${dst}: bytes=32 tempo=${ms}ms TTL=${64-Math.max(0,path.filter(isRouterLike).length)}`);
+        animatePingEnvelope(n,target,{ subtitle:'ICMP Echo' });
+      } else cliLog('err',`Tempo limite esgotado: ${dst} inacessível (verifique VLAN/trunk/gateway/rotas).`);
+      if (i===4) cliLog('info',`Estatísticas: 4 enviados, ${reachable?4:0} recebidos, ${reachable?0:100}% perdidos`);
+    },180*i);
+  };
+
+  isReachable = function(src,dst){ const p = findRoutedPath(src,dst); return p.length > 0 && pathVlanOk(p); };
+
+  runTraceroute = function(n,dst){
+    const target = nodes.find(nd=>nd.ip===dst && nd.active!==false);
+    if (!target) { cliLog('err','Destino não encontrado.'); return; }
+    const path = findRoutedPath(n,target);
+    if (!path.length) { cliLog('err','* * * Destino inacessível (gateway/rotas/VLAN)'); return; }
+    cliLog('info',`Traceroute para ${dst}:`);
+    path.forEach((hop,i)=>setTimeout(()=>cliLog('ok',`${String(i+1).padStart(2)}  ${(hop.ip||hop.name).padEnd(18)} ${Math.floor(Math.random()*16+1)} ms`),220*(i+1)));
+  };
+
+  runSimStep = function(){
+    if (!simPduQueue.length) { cliLog('info','[SIM] Fila PDU vazia — ative Modo Simulação e execute um ping.'); return; }
+    const pdu = simPduQueue[0];
+    const pathNodes = (pdu.path||[]).map(getNode).filter(Boolean);
+    if (!pathNodes.length) { simPduQueue.shift(); return; }
+    const cur = pathNodes[pdu.hop];
+    const next = pathNodes[pdu.hop+1];
+    cliLog('info', `[SIM] ${pdu.proto} | OSI: ${pdu.info?.osi||'L2/L3'} | passo ${pdu.hop+1}/${pathNodes.length}`);
+    cliLog('', `      ${cur?.name||'?'}${next ? ' → '+next.name : ' chegou ao destino'} ${pdu.info?.targetIp ? '| alvo '+pdu.info.targetIp : ''}`);
+    if (cur && next) animatePingEnvelope(cur,next,{ subtitle:pdu.proto.replace('ICMP ','') });
+    pdu.hop++;
+    if (pdu.hop >= pathNodes.length-1) {
+      cliLog('ok', `[SIM] ${pdu.proto} concluído: ${pdu.src} → ${pdu.dst}`);
+      simPduQueue.shift();
+    }
+  };
+
+  function runOspfCalculation(){
+    const ospfRouters = nodes.filter(n=>isRouterLike(n) && n.ospf?.enabled && n.active!==false);
+    ospfRouters.forEach(r=>{ r.ospf.neighbors = []; });
+    for (let i=0;i<ospfRouters.length;i++) for (let j=i+1;j<ospfRouters.length;j++) {
+      const a=ospfRouters[i], b=ospfRouters[j];
+      const p=l2Path(a,b);
+      if (p.length) { a.ospf.neighbors.push(b.name); b.ospf.neighbors.push(a.name); }
+    }
+    ospfRouters.forEach(r=>{
+      const learned = [];
+      ospfRouters.forEach(o=>{
+        if (o.id===r.id) return;
+        const path=l2Path(r,o);
+        if (!path.length) return;
+        connectedNetworks(o).forEach(cn=>{
+          if (!connectedNetworks(r).some(x=>x.network===cn.network && x.mask===cn.mask)) {
+            learned.push({ network:cn.network, mask:cn.mask, prefix:cn.prefix, nexthop:o.ip || (o.interfaces||[]).find(i=>i.ip)?.ip || o.name, metric:String(path.length), source:'O' });
+          }
+        });
+      });
+      r.routing = (r.routing||[]).filter(x=>x.source!=='O').concat(learned);
+    });
+  }
+
+  function showIpRoute(n){
+    runOspfCalculation();
+    cliLog('ok','Codes: C - connected, S - static, O - OSPF');
+    connectedNetworks(n).forEach(r=>cliLog('ok',`C    ${r.network}/${r.prefix} is directly connected, ${r.iface}`));
+    (n.routing||[]).forEach(r=>cliLog('ok',`${(r.source||'S').padEnd(4)} ${r.network}/${r.prefix||maskToPrefix(r.mask)} [${r.metric||1}] via ${r.nexthop}`));
+  }
+  function showOspfNeighbor(n){
+    runOspfCalculation();
+    if (!n.ospf?.enabled) { cliLog('warn','OSPF não está ativo neste equipamento.'); return; }
+    cliLog('ok','Neighbor ID        State      Interface');
+    (n.ospf.neighbors||[]).forEach(nb=>cliLog('ok',`${nb.padEnd(18)} FULL/DR    auto`));
+    if (!n.ospf.neighbors?.length) cliLog('warn','Nenhum vizinho OSPF encontrado.');
+  }
+
+  processCommand = function(cmd,n,execOverride=false){
+    const raw = cmd.trim(); const lc = raw.toLowerCase();
+    if (lc === 'show packet-engine' || lc === 'show simulation queue') {
+      cliLog('info',`NetSim ${ADV_VERSION}`);
+      cliLog('ok',`PDUs na fila: ${simPduQueue.length}`);
+      simPduQueue.forEach((p,i)=>cliLog('',`${i+1}. ${p.proto} ${p.src} → ${p.dst} hop ${p.hop+1}/${p.path.length}`));
+      return;
+    }
+    if (lc === 'show ip route' && n) { showIpRoute(n); return; }
+    if (lc === 'show ip ospf neighbor' && n) { showOspfNeighbor(n); return; }
+    if (lc === 'clear arp' && n) { n.arp=[]; cliLog('ok','Tabela ARP limpa.'); showProperties(n); return; }
+    if (lc === 'clear mac address-table' && n && isSwitchNode(n)) { n.macTable=[]; cliLog('ok','Tabela MAC limpa.'); showProperties(n); return; }
+    if (n) ensureNodeDefaults(n);
+    if (n && (n.cli?.mode === 'config') && /^router\s+ospf\s+\d+/i.test(raw) && isRouterLike(n)) {
+      const pid = raw.split(/\s+/)[2];
+      n.ospf = n.ospf || {}; n.ospf.enabled = true; n.ospf.processId = pid; n.ospf.networks = n.ospf.networks || [];
+      n.cli.mode = 'ospf'; updateCliPromptAdvanced(n); cliLog('ok',`OSPF processo ${pid} ativado.`); return;
+    }
+    if (n && n.cli?.mode === 'ospf') {
+      if (/^network\s+/i.test(raw)) {
+        const p=raw.split(/\s+/); n.ospf.networks.push({ network:p[1], wildcard:p[2]||'0.0.0.255', area:p[p.length-1]||'0' });
+        runOspfCalculation(); cliLog('ok',`OSPF network ${p[1]} area ${p[p.length-1]||'0'} configurado.`); return;
+      }
+      if (lc==='exit') { n.cli.mode='config'; updateCliPrompt(n); return; }
+      if (lc==='end') { n.cli.mode='privileged'; updateCliPrompt(n); return; }
+    }
+    oldProcessCommand(cmd,n,execOverride);
+  };
+
+  function updateCliPromptAdvanced(n){
+    if (n?.cli?.mode === 'ospf') {
+      const p = n.name + '(config-router)#';
+      document.getElementById('cli-prompt-label').textContent = p;
+      const dp = document.getElementById('desk-cli-prompt'); if (dp) dp.textContent = p;
+    } else updateCliPrompt(n);
+  }
+  const oldCliPromptString = cliPromptString;
+  cliPromptString = function(n){ return n?.cli?.mode === 'ospf' ? n.name+'(config-router)#' : oldCliPromptString(n); };
+
+  showPtRoadmap = function(){
+    oldShowPtRoadmap();
+    cliLog('info','══ Avanços v4 adicionados ══');
+    cliLog('ok','Engine de pacotes com fila PDU, ARP Request/Reply, ICMP Echo Request/Reply, MAC learning por caminho, VLAN access/trunk, roteamento por gateway/rotas e OSPF educacional.');
+    cliLog('','Comandos: <b>show packet-engine</b>, <b>show simulation queue</b>, <b>show ip route</b>, <b>router ospf 1</b>, <b>network 192.168.1.0 0.0.0.255 area 0</b>, <b>show ip ospf neighbor</b>.');
+  };
+
+  const oldHelp = showHelp;
+  if (typeof showHelp === 'function') {
+    showHelp = function(){
+      oldHelp();
+      cliLog('info','v4: use <b>show packet-engine</b>, <b>show ip route</b>, <b>router ospf 1</b> e o Modo Simulação para ver ARP/ICMP passo a passo.');
+    };
+  }
+})();
