@@ -5,14 +5,14 @@
 <link rel="icon" href="https://img.icons8.com/?size=100&id=eyShSycUjhR9&format=png&color=000000" type="image/png">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NetSim Pro — Simulador de Redes</title>
+<title>Fran-CISCO Simulador de Redes</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <!-- MENU BAR -->
 <div id="menubar">
-  <div class="menu-logo">🌐 <span>NetSim</span> Pro</div>
+  <div class="menu-logo">🌐 <span>Fran-CISCO</span> Pro</div>
   <div class="menu-items">
     <div class="menu-item">Arquivo
       <div class="dropdown">
@@ -53,8 +53,9 @@
     <div class="menu-item">Ajuda
       <div class="dropdown">
         <div class="dd-item" onclick="showHelp()">Guia Rápido</div>
+        <div class="dd-item" onclick="toggleAiProfessor(true)">Professor AI</div>
         <div class="dd-item" onclick="showPtRoadmap()">Paridade Packet Tracer</div>
-        <div class="dd-item" onclick="showAbout()">Sobre o NetSim Pro</div>
+        <div class="dd-item" onclick="showAbout()">Sobre o Fran-CISCO</div>
       </div>
     </div>
   </div>
@@ -86,6 +87,8 @@
   <div class="tb-group">
     <div class="tb-btn" title="Ping" onclick="openPingModal()">📡</div>
     <div class="tb-btn" title="Auto Layout" onclick="autoLayout()">⊞</div>
+    <div class="tb-btn ai-toolbar-btn" title="Professor AI" onclick="toggleAiProfessor()">💡</div>
+    <span class="ai-toolbar-label" onclick="toggleAiProfessor()">AI Help</span>
   </div>
   <div class="mode-indicator">
     <div class="mode-badge select" id="mode-badge">SELECIONAR</div>
@@ -326,6 +329,100 @@
   </div>
 </div>
 
+
+<!-- PROFESSOR AI GROQ -->
+<aside id="ai-professor-panel" class="ai-professor-panel" aria-hidden="true">
+  <div class="ai-professor-glow"></div>
+  <div class="ai-professor-head" id="ai-professor-drag-handle" title="Arraste para mover o Professor AI">
+    <div class="ai-drag-dots">⋮⋮</div>
+    <div class="ai-professor-title">Professor AI</div>
+    <button class="ai-professor-close" onclick="toggleAiProfessor(false)" title="Fechar">×</button>
+  </div>
+
+  <div class="ai-avatar-wrap">
+    <img class="ai-avatar" src="https://raw.githubusercontent.com/leandrocirilojs/Cisco-Packet-Tracer/main/avatar.jpeg" alt="Professor AI">
+    <div class="ai-avatar-ring"></div>
+  </div>
+
+  <div id="ai-status" class="ai-status">Groq: configure sua chave para ativar</div>
+
+  <div id="ai-chat" class="ai-chat">
+    <div class="ai-msg ai-msg-bot">
+      <b>Olá, Leandro!</b><br>Eu sou seu professor de Redes. Posso explicar comandos, analisar sua topologia e criar desafios dentro do Fran-CISCO.
+    </div>
+  </div>
+
+
+  <div class="ai-learning-hub collapsed" id="ai-learning-hub">
+    <button class="ai-learning-title" type="button" onclick="toggleLessonPanel()" title="Abrir ou fechar o Modo Aula">
+      <span>📚 Modo Aula de Redes</span>
+      <span id="lesson-arrow" class="lesson-arrow">▶</span>
+    </button>
+    <div id="lesson-content" class="ai-learning-content">
+      <div class="ai-learning-grid">
+        <button onclick="startNetworkLesson('fundamentos')">Fundamentos</button>
+        <button onclick="startNetworkLesson('osi')">Modelo OSI</button>
+        <button onclick="startNetworkLesson('tcpip')">TCP/IP</button>
+        <button onclick="startNetworkLesson('ip')">IP e Máscara</button>
+        <button onclick="startNetworkLesson('switch-router')">Switch/Roteador</button>
+        <button onclick="startNetworkLesson('servicos')">DHCP/DNS/ARP/ICMP</button>
+        <button onclick="startNetworkLesson('vlan')">VLAN</button>
+        <button onclick="startNetworkLesson('seguranca')">Segurança</button>
+        <button onclick="startLessonQuiz()">Quiz</button>
+        <button onclick="createGuidedLab()">Desafio guiado</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ai-quick-actions">
+    <button onclick="askProfessorQuick('Analise minha topologia atual usando o diagnóstico automático e diga exatamente o que devo corrigir primeiro.')">Analisar rede</button>
+    <button onclick="askProfessorQuick('Crie um desafio prático de redes para eu fazer no simulador.')">Criar desafio</button>
+    <button onclick="askProfessorQuick('Meu ping está falhando. Analise IP, gateway, VLAN, links, ARP, MAC e rotas usando a topologia atual.')">Ping falhando</button>
+  </div>
+
+  <div class="ai-input-box">
+    <textarea id="ai-input" placeholder="Pergunte ao Professor AI..." onkeydown="aiInputKeyDown(event)"></textarea>
+    <button onclick="sendProfessorMessage()">Enviar</button>
+  </div>
+
+  <details class="ai-config">
+    <summary>Configurar Groq</summary>
+    <label>API Key da Groq</label>
+    <input id="groq-api-key" type="password" placeholder="gsk_...">
+    <label>Modelo</label>
+    <input id="groq-model" type="text" value="llama-3.1-8b-instant">
+    <label>Backend Proxy opcional</label>
+    <input id="groq-proxy-url" type="text" placeholder="https://seu-backend.com/api/groq">
+    <div class="ai-config-actions">
+      <button onclick="saveGroqSettings()">Salvar</button>
+      <button onclick="clearGroqSettings()">Limpar</button>
+    </div>
+    <p>Para GitHub Pages, use proxy/backend para não expor sua chave. Para teste local, a chave fica salva apenas no navegador.</p>
+  </details>
+</aside>
+
+
+
+<!-- NETBOT — ASSISTENTE ANIMADO -->
+<div id="netbot" class="netbot" aria-live="polite">
+  <div id="netbot-bubble" class="netbot-bubble">
+    Olá! Eu sou o NetBot. Vou te ajudar a aprender Redes enquanto você monta a topologia.
+  </div>
+  <button id="netbot-avatar" class="netbot-avatar" onclick="netBotToggleMenu()" title="NetBot — clique para interagir">
+    <span class="netbot-face">🤖</span>
+    <span class="netbot-eye left"></span>
+    <span class="netbot-eye right"></span>
+  </button>
+  <div id="netbot-actions" class="netbot-actions">
+    <button onclick="netBotExplainCurrent()">📚 Explicar rede</button>
+    <button onclick="startNetworkLesson('fundamentos')">🎓 Modo Aula</button>
+    <button onclick="netBotAnalyzeCurrent()">🔍 Analisar</button>
+    <button onclick="netBotCreateChallenge()">🎯 Desafio</button>
+    <button onclick="netBotHide()">Minimizar</button>
+  </div>
+</div>
+<button id="netbot-mini" class="netbot-mini" onclick="netBotShow()" title="Mostrar NetBot">🤖</button>
+
 <!-- STATUS BAR -->
 <div id="statusbar">
   <div class="sb-item"><div class="sb-dot" id="sim-dot"></div><span id="sim-status-txt">Modo Tempo Real</span></div>
@@ -462,7 +559,7 @@
 <div class="modal-overlay" id="help-modal">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">📖 Guia Rápido — NetSim Pro</div>
+      <div class="modal-title">📖 Guia Rápido — Fran-CISCO</div>
       <div class="modal-close" onclick="closeModal('help-modal')">✕</div>
     </div>
     <div class="modal-body" style="font-size:12px;line-height:1.8;color:var(--text-secondary)">
